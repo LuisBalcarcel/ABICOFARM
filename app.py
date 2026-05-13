@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
+from werkzeug.security import generate_password_hash, check_password_hash
 from flask_sqlalchemy import SQLAlchemy
 import os
 from optimizer import generar_horario_semana 
@@ -77,8 +78,8 @@ def login():
         username = request.form['username']
         password = request.form['password']
 
-        user = Empleado.query.filter_by(username=username, password=password).first()
-        if user:
+        user = Empleado.query.filter_by(username=username).first()
+        if user and validar_password(user, password):
             session['user_id'] = user.id
             session['rol'] = user.rol
             session['nombre'] = user.nombre
@@ -91,6 +92,25 @@ def login():
             flash('Usuario o contraseña incorrectos', 'error')
 
     return render_template('login.html')
+
+
+def validar_password(usuario, password_plano):
+    if not usuario or not password_plano:
+        return False
+
+    try:
+        if usuario.password and usuario.password.startswith('pbkdf2:'):
+            return check_password_hash(usuario.password, password_plano)
+    except Exception:
+        pass
+
+    if usuario.password == password_plano:
+        # Migra a hash cuando el usuario inicia sesion correctamente
+        usuario.password = generate_password_hash(password_plano)
+        db.session.commit()
+        return True
+
+    return False
 
 @app.route('/admin')
 def admin_dashboard():
@@ -284,6 +304,58 @@ def empleado_permisos():
                            nombre=session.get('nombre'),
                            user=usuario_actual,
                            solicitudes=data['solicitudes'])
+
+
+@app.route('/empleado/perfil')
+def empleado_perfil():
+    if 'user_id' not in session or session.get('rol') == 'Admin':
+        return redirect(url_for('login'))
+
+    empleado_id = session['user_id']
+    usuario_actual = Empleado.query.get(empleado_id)
+    farmacia = usuario_actual.farmacia.nombre if usuario_actual and usuario_actual.farmacia else '--'
+    dias_nombre = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
+    if usuario_actual and usuario_actual.dia_descanso_fijo is not None:
+        dia_descanso_texto = dias_nombre[usuario_actual.dia_descanso_fijo]
+    else:
+        dia_descanso_texto = 'Rotativo'
+
+    return render_template('perfil_empleado.html',
+                           nombre=session.get('nombre'),
+                           user=usuario_actual,
+                           farmacia=farmacia,
+                           dia_descanso_texto=dia_descanso_texto)
+
+
+@app.route('/empleado/perfil/cambiar-credenciales', methods=['POST'])
+def cambiar_credenciales_empleado():
+    if 'user_id' not in session or session.get('rol') == 'Admin':
+        return jsonify({'status': 'error', 'mensaje': 'unauthorized'}), 401
+
+    empleado_id = session['user_id']
+    usuario_actual = Empleado.query.get(empleado_id)
+
+    username_nuevo = request.form.get('username', '').strip()
+    password_actual = request.form.get('password_actual', '')
+    password_nueva = request.form.get('password_nueva', '')
+
+    if not password_actual:
+        return jsonify({'status': 'error', 'mensaje': 'Debes ingresar la contraseña actual.'}), 400
+
+    if not validar_password(usuario_actual, password_actual):
+        return jsonify({'status': 'error', 'mensaje': 'La contraseña actual no es valida.'}), 400
+
+    if username_nuevo and username_nuevo != usuario_actual.username:
+        existente = Empleado.query.filter_by(username=username_nuevo).first()
+        if existente:
+            return jsonify({'status': 'error', 'mensaje': 'El nombre de usuario ya existe.'}), 400
+        usuario_actual.username = username_nuevo
+
+    if password_nueva:
+        usuario_actual.password = generate_password_hash(password_nueva)
+
+    db.session.commit()
+    return jsonify({'status': 'ok'})
 
 
 def construir_estado_empleado(empleado_id):

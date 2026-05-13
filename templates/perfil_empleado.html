@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Portal Empleado - Mi Perfil</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap');
+        body { font-family: 'Montserrat', sans-serif; background-color: #f4f7f6; margin: 0; display: flex; min-height: 100vh; color: #003366; }
+        .sidebar { width: 240px; background-color: #1a2b4a; color: white; padding: 20px; box-sizing: border-box; }
+        .brand { color: #FF6B00; font-size: 20px; font-weight: 700; line-height: 1.1; margin-bottom: 40px; }
+        .brand span { color: white; font-size: 12px; }
+        .menu-item { padding: 15px 10px; margin-bottom: 5px; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; color: #a0aec0; text-decoration: none; display: block; }
+        .menu-item.active { background-color: #FF6B00; color: white; }
+        .main-content { flex: 1; padding: 40px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        .field-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee; font-size: 14px; }
+        .field-row:last-child { border-bottom: none; }
+        label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+        input[type="text"], input[type="password"] { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ccc; border-radius: 8px; font-family: 'Montserrat'; box-sizing: border-box; }
+        button { background-color: #FF6B00; color: white; border: none; padding: 10px 15px; border-radius: 8px; cursor: pointer; font-weight: bold; }
+        .logout { color: #FF6B00; font-weight: bold; text-decoration: none; }
+        .toast { margin-top: 10px; font-size: 12px; padding: 8px 10px; border-radius: 6px; display: none; }
+        .toast.exito { background: #e8f5e9; color: #2e7d32; display: block; }
+        .toast.error { background: #ffebee; color: #c62828; display: block; }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <div class="brand">Bienestar<br>Comunitario<br><span>FARMACÉUTICO</span></div>
+        <a href="{{ url_for('empleado_horario') }}" class="menu-item">Mi Horario</a>
+        <a href="{{ url_for('empleado_permisos') }}" class="menu-item">Permisos</a>
+        <a href="{{ url_for('empleado_perfil') }}" class="menu-item active">Mi Perfil</a>
+        <div style="margin-top: 50px;">
+            <p style="font-size:12px; color:#a0aec0;">Usuario: {{ user.nombre }}</p>
+            <a href="{{ url_for('logout') }}" class="logout">Cerrar Sesion</a>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <div class="card">
+            <h3 style="margin-top:0; color:#FF6B00;">Mis Datos</h3>
+            <div class="field-row"><span>Nombre completo</span><strong>{{ user.nombre }}</strong></div>
+            <div class="field-row"><span>Rol en el sistema</span><strong>{{ user.rol }}</strong></div>
+            <div class="field-row"><span>Sucursal asignada</span><strong>{{ farmacia }}</strong></div>
+            <div class="field-row"><span>Horario base</span><strong>{{ user.horario }}</strong></div>
+            <div class="field-row"><span>Dia de descanso</span><strong>{{ dia_descanso_texto }}</strong></div>
+        </div>
+
+        <div class="card">
+            <h3 style="margin-top:0; color:#FF6B00;">Cambiar Credenciales</h3>
+            <form id="perfil-form" action="{{ url_for('cambiar_credenciales_empleado') }}" method="POST">
+                <label>Nombre de usuario</label>
+                <input type="text" name="username" value="{{ user.username }}" required>
+
+                <label>Contraseña actual</label>
+                <input type="password" name="password_actual" required>
+
+                <label>Nueva contraseña (opcional)</label>
+                <input type="password" name="password_nueva" id="passwordNueva">
+
+                <label>Confirmar nueva contraseña</label>
+                <input type="password" name="password_confirmar" id="passwordConfirmar">
+
+                <button type="submit">Guardar Cambios</button>
+                <div id="perfil-toast" class="toast"></div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('perfil-form');
+        const toast = document.getElementById('perfil-toast');
+        const passwordNueva = document.getElementById('passwordNueva');
+        const passwordConfirmar = document.getElementById('passwordConfirmar');
+
+        function mostrarToast(texto, tipo) {
+            if (!toast) {
+                return;
+            }
+            toast.textContent = texto;
+            toast.classList.remove('exito', 'error');
+            toast.classList.add(tipo);
+            setTimeout(() => {
+                toast.classList.remove('exito', 'error');
+                toast.textContent = '';
+            }, 4000);
+        }
+
+        if (form) {
+            form.addEventListener('submit', async (event) => {
+                event.preventDefault();
+
+                if (passwordNueva.value || passwordConfirmar.value) {
+                    if (passwordNueva.value !== passwordConfirmar.value) {
+                        mostrarToast('❌ Las contraseñas no coinciden', 'error');
+                        return;
+                    }
+                }
+
+                try {
+                    const formData = new FormData(form);
+                    const resp = await fetch(form.action, {
+                        method: 'POST',
+                        body: formData,
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
+                    });
+                    const data = await resp.json();
+
+                    if (!resp.ok || data.status !== 'ok') {
+                        mostrarToast(`❌ ${data.mensaje || 'Error al actualizar'}`, 'error');
+                        return;
+                    }
+
+                    mostrarToast('✅ Datos actualizados correctamente', 'exito');
+                } catch (err) {
+                    console.error('Error al actualizar perfil', err);
+                    mostrarToast('❌ Error al actualizar', 'error');
+                }
+            });
+        }
+    </script>
+</body>
+</html>

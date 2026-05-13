@@ -30,6 +30,7 @@
         <div class="brand">Bienestar<br>Comunitario<br><span>FARMACÉUTICO</span></div>
         <a href="{{ url_for('empleado_horario') }}" class="menu-item">Mi Horario</a>
         <a href="{{ url_for('empleado_permisos') }}" class="menu-item active">Permisos</a>
+        <a href="{{ url_for('empleado_perfil') }}" class="menu-item">Mi Perfil</a>
         <div style="margin-top: 50px;">
             <p style="font-size:12px; color:#a0aec0;">Usuario: {{ user.nombre }}</p>
             <a href="{{ url_for('logout') }}" class="logout">Cerrar Sesion</a>
