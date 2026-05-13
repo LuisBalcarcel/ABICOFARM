@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Solicitudes - Admin</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap');
+        body { font-family: 'Montserrat', sans-serif; background-color: #f4f7f6; margin: 0; display: flex; height: 100vh; color: #1a365d; }
+        .sidebar { width: 250px; background-color: #003366; color: white; padding: 20px; box-sizing: border-box; }
+        .brand { color: #ff6b00; font-size: 20px; font-weight: 700; line-height: 1.1; margin-bottom: 40px; }
+        .brand span { color: white; font-size: 12px; }
+        .menu-item { padding: 15px 10px; margin-bottom: 5px; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; color: #a0aec0; text-decoration: none; display: block;}
+        .menu-item.active { background-color: #ff6b00; color: white; }
+        .main-content { flex: 1; padding: 40px; overflow-y: auto; }
+        .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        table { width: 100%; border-collapse: collapse; text-align: left; }
+        th { background-color: #f4f7f6; padding: 15px; font-size: 13px; }
+        td { padding: 15px; border-bottom: 1px solid #eee; font-size: 14px; }
+        
+        /* Estilos originales */
+        .btn-action { padding: 6px 12px; border-radius: 6px; font-weight: 600; font-size: 13px; text-decoration: none; cursor: pointer; display: inline-block; border: none; font-family: inherit; }
+        .btn-approve { background: #d4dfcc; color: #387015; }
+        .btn-reject { background: #e0ced7; color: #9b2f76; }
+
+        /* NUEVOS ESTILOS PARA LOS BOTONES HOMOGÉNEOS */
+        .btn-action-small {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 13px;
+            text-decoration: none;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+            font-family: inherit;
+        }
+
+        .btn-edit { background-color: #e3f2fd; color: #0277bd; }
+        .btn-edit:hover { background-color: #bbdefb; }
+
+        .btn-delete { background-color: #ffebee; color: #c62828; }
+        .btn-delete:hover { background-color: #ffcdd2; }
+        
+        .action-container {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <div class="brand">Bienestar<br>Comunitario<br><span>FARMACÉUTICO</span></div>
+        <a href="{{ url_for('admin_dashboard') }}" class="menu-item">👥 Empleados Activos</a>
+        <a href="{{ url_for('admin_farmacias') }}" class="menu-item">🏥 Sucursales</a>
+        <a href="{{ url_for('ver_horarios_ia') }}" class="menu-item">🧠 Generación IA</a>
+        <a href="{{ url_for('admin_solicitudes') }}" class="menu-item active">📩 Permisos y Bajas</a>
+        
+        <div style="margin-top: 50px;">
+            <p style="font-size:12px; color:#a0aec0;">Usuario: {{ session.get('nombre', 'Admin') }}</p>
+            <a href="{{ url_for('logout') }}" class="logout" style="color:#ff6b00; font-weight:bold; text-decoration:none; font-size:14px;">Cerrar Sesión</a>
+        </div>
+    </div>
+    
+    <div class="main-content">
+        <h1>Gestión de Permisos</h1>
+        
+        <div class="card">
+            <table>
+                <tr>
+                    <th>EMPLEADO</th>
+                    <th>FECHA SOLICITADA</th>
+                    <th>MOTIVO</th>
+                    <th>ESTADO</th>
+                    <th>ACCIÓN</th>
+                </tr>
+                {% for s in solicitudes %}
+                <tr>
+                    <td>{{ s.empleado.nombre }}</td>
+                    <td><b>{{ s.fecha }}</b></td>
+                    <td>{{ s.motivo }}<br><i style="font-size:11px; color:#666;">{{ s.mensaje_admin }}</i></td>
+                    <td><b>{{ s.estado }}</b></td>
+                    <td>
+                        <div class="action-container">
+                            {% if s.estado == 'Pendiente' %}
+                                <a href="{{ url_for('cambiar_estado_solicitud', id=s.id, estado='Aprobada') }}" class="btn-action btn-approve">Aprobar</a>
+                                <a href="{{ url_for('cambiar_estado_solicitud', id=s.id, estado='Rechazada') }}" class="btn-action btn-reject">Rechazar</a>
+                                <a href="{{ url_for('modificar_solicitud', id=s.id) }}" class="btn-action-small btn-edit">Modificar</a>
+                            
+                            {% elif s.estado == 'Pide Cancelación' %}
+                                <a href="{{ url_for('confirmar_cancelacion', id=s.id) }}" class="btn-action" style="background:#e1bee7; color:#4a148c; border:2px solid #ce93d8;">[ ? ] Aceptar Cancelación</a>
+                            
+                            {% else %}
+                                <span style="color:#b0bec5; font-style:italic;">Procesada</span>
+                                
+                                <!-- NUEVO: Permitir al Admin cancelar y modificar SUS PROPIOS registros directos -->
+                                {% if s.mensaje_admin == 'Registro Administrativo Directo' and s.estado != 'Cancelada' %}
+                                    <div style="margin-left: 10px; display: flex; gap: 8px;">
+                                        <a href="{{ url_for('modificar_solicitud', id=s.id) }}" class="btn-action-small btn-edit">Editar</a>
+                                        
+                                        <form action="{{ url_for('admin_forzar_cancelacion', id=s.id) }}" method="POST" style="margin: 0;">
+                                            <button type="submit" class="btn-action-small btn-delete" onclick="return confirm('¿Seguro que deseas CANCELAR esta suspensión administrativa?');">Eliminar</button>
+                                        </form>
+                                    </div>
+                                {% endif %}
+                                
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </table>
+            <p style="font-size:12px; color:#666; margin-top:20px;">*Nota: Los permisos "Aprobados" serán bloqueados en el próximo cálculo de la IA y cubiertos por comodines.</p>
+        </div>
+
+        <!-- NUEVO: FORMULARIO DE SUSPENSIONES / AUSENCIAS ADMINISTRATIVAS -->
+        <div class="card" style="margin-top: 30px; border-left: 5px solid #d32f2f;">
+            <h3 style="margin-top:0; color:#d32f2f;">Registrar Ausencia / Suspensión Administrativa</h3>
+            <p style="font-size: 13px; color: #666; margin-bottom: 20px;">
+                Usa este formulario para registrar suspensiones disciplinarias, faltas injustificadas o días a cuenta de vacaciones. Entrarán directamente al sistema como "Aprobadas" y la Inteligencia Artificial <b>no les asignará turno</b> en esa fecha.
+            </p>
+            
+            <form action="{{ url_for('registrar_ausencia_admin') }}" method="POST">
+                <div style="display: grid; grid-template-columns: 1fr 1fr 2fr auto; gap: 15px; align-items: end;">
+                    
+                    <!-- Seleccionar Empleado -->
+                    <div>
+                        <label style="font-size: 12px; font-weight: bold; color:#333;">Empleado:</label>
+                        <select name="empleado_id" required style="padding: 10px; border-radius: 8px; border: 1px solid #ccc; width: 100%; font-family: 'Montserrat', sans-serif;">
+                            <option value="">Seleccione un empleado...</option>
+                            {% for e in empleados %}
+                                <option value="{{ e.id }}">{{ e.nombre }} ({{ e.rol }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <!-- Seleccionar Fecha -->
+                    <div>
+                        <label style="font-size: 12px; font-weight: bold; color:#333;">Fecha de Ausencia:</label>
+                        <input type="date" name="fecha" required style="padding: 10px; border-radius: 8px; border: 1px solid #ccc; width: 100%; box-sizing: border-box; font-family: 'Montserrat', sans-serif;">
+                    </div>
+
+                    <!-- Motivo -->
+                    <div>
+                        <label style="font-size: 12px; font-weight: bold; color:#333;">Motivo (Ej. Suspensión 1 día):</label>
+                        <input type="text" name="motivo" required placeholder="Motivo de la falta o suspensión..." style="padding: 10px; border-radius: 8px; border: 1px solid #ccc; width: 100%; box-sizing: border-box; font-family: 'Montserrat', sans-serif;">
+                    </div>
+
+                    <!-- Botón -->
+                    <div>
+                        <button type="submit" style="background-color: #d32f2f; color: white; padding: 11px 20px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; width: 100%; font-family: 'Montserrat', sans-serif;">
+                            Registrar Ausencia
+                        </button>
+                    </div>
+                    
+                </div>
+            </form>
+        </div>
+
+    </div>
+</body>
+</html>

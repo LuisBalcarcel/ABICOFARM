@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Portal Empleado</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap');
+        .fila-permiso { background-color: #e1f5fe; }
+        .fila-permiso td { color: #0277bd; font-style: italic; }
+        body { font-family: 'Montserrat', sans-serif; background-color: #f4f7f6; margin: 0; color: #003366; }
+        .navbar { background-color: #003366; padding: 15px 40px; display: flex; justify-content: space-between; align-items: center; color: white; }
+        .brand { font-size: 20px; font-weight: 700; color: #ff6b00; }
+        .brand span { font-size: 12px; color: white; display: block; font-weight: 400; }
+        .container { max-width: 1000px; margin: 40px auto; padding: 0 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        .logout { color: #ff6b00; font-weight: bold; text-decoration: none; margin-left: 15px;}
+        input, select { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ccc; border-radius: 8px; font-family: 'Montserrat'; box-sizing:border-box;}
+        button { background-color: #ff6b00; color: white; border: none; padding: 10px 15px; border-radius: 8px; cursor: pointer; font-weight: bold;}
+        table { width: 100%; border-collapse: collapse; margin-top: 15px;}
+        td, th { padding: 10px; border-bottom: 1px solid #eee; font-size: 13px;}
+        .estado-aprobada { color: green; font-weight: bold; }
+        .estado-rechazada { color: red; font-weight: bold; }
+        .estado-pendiente { color: orange; font-weight: bold; }
+        .estado-cancelada { color: red; font-weight: bold; }
+        .estado-pide-cancelacion { color: purple; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="brand">Bienestar Comunitario <span>FARMACÉUTICO</span></div>
+        <div>{{ user.nombre }} <a href="{{ url_for('logout') }}" class="logout">Salir</a></div>
+    </nav>
+
+    <div class="container">
+        <!-- HORARIO DE LA SEMANA -->
+        <div class="card" style="grid-column: span 2;">
+            <h3 style="margin-top:0; color:#00bcd4;">Tu Horario Oficial semanal</h3>
+            
+            <style>
+                .horario-table { width: 100%; border-collapse: collapse; }
+                .horario-table th, .horario-table td { 
+                    text-align: center;
+                    vertical-align: middle;
+                    padding: 12px;
+                    border-bottom: 1px solid #eee;
+                }
+                .horario-table th { color: #0288d1; font-size: 14px; }
+            </style>
+
+            <table class="horario-table">
+                <tr>
+                    <th width="30%">Día</th>
+                    <th width="35%">Sucursal</th>
+                    <th width="35%">Horario</th>
+                </tr>
+                
+                {% set dias_semana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'] %}
+                
+                {% for i in range(7) %}
+                    {% set turno = mi_horario.get(i) %}
+                    
+                    {% if turno %}
+                        {% if turno == 'Permiso Aprobado' %}
+                        <tr class="fila-descanso">
+                            <td>
+                                <b>{{ dias_semana[i] }}</b><br>
+                                <span style="font-size:11px; color:#999;">{{ fechas_semana[i] }}</span>
+                            </td>
+                            <td style="color: #b0bec5; font-weight: bold; font-style: italic;">Permiso Aprobado</td>
+                            <td style="color: #b0bec5; font-style: italic;">-</td>
+                        </tr>
+                        {% elif turno == 'Suspensión' %}
+                        <tr style="background-color: #ffebee;">
+                            <td>
+                                <b style="color: #c62828;">{{ dias_semana[i] }}</b><br>
+                                <span style="font-size:11px; color:#c62828; opacity: 0.8;">{{ fechas_semana[i] }}</span>
+                            </td>
+                            <td style="color: #c62828; font-weight: bold;">Suspensión</td>
+                            <td style="color: #c62828; font-style: italic;">-</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td>
+                                <b>{{ dias_semana[i] }}</b><br>
+                                <span style="font-size:11px; color:#999;">{{ fechas_semana[i] }}</span>
+                            </td>
+                            <td style="color:#ff6b00; font-weight:bold;">{{ turno }}</td>
+                            <td>8 AM - 6:00 PM</td>
+                        </tr>
+                        {% endif %}
+                    {% else %}
+                        <tr class="fila-descanso">
+                            <td>
+                                <b>{{ dias_semana[i] }}</b><br>
+                                <span style="font-size:11px; color:#999;">{{ fechas_semana[i] }}</span>
+                            </td>
+                            <td style="font-style: italic;">-</td>
+                            <td style="font-style: italic;">Descanso</td>
+                        </tr>
+                    {% endif %}
+                {% endfor %}
+            </table>
+            
+            {% set ns = namespace(tiene_turno=false) %}
+            {% for i in range(7) %}
+                {% if mi_horario.get(i) and mi_horario.get(i) != 'Permiso Aprobado' and mi_horario.get(i) != 'Suspensión' %}
+                    {% set ns.tiene_turno = true %}
+                {% endif %}
+            {% endfor %}
+
+            {% if not ns.tiene_turno %}
+                <p style="color: #d32f2f; font-size: 12px; margin-top: 15px; font-weight: 600;">
+                    * El horario actual está vacío. Contacta al administrador para que asigne un horario.
+                </p>
+            {% endif %}
+        </div>
+
+        <!-- SOLICITAR PERMISO -->
+        <div class="card">
+            <h3 style="margin-top:0;">Solicitar Permiso (Ausencia)</h3>
+            <form action="{{ url_for('nueva_solicitud_empleado') }}" method="POST">
+                <label>Fecha exacta a faltar:</label>
+                <input type="date" name="fecha" required>
+                <label>Motivo:</label>
+                <input type="text" name="motivo" placeholder="Ej. Cita médica, Asunto personal..." required>
+                <button type="submit">Enviar Solicitud</button>
+            </form>
+        </div>
+
+        <!-- MIS SOLICITUDES -->
+        <div class="card">
+            <h3 style="margin-top:0;">Estado de mis solicitudes</h3>
+            <table>
+                <tr><th>Fecha</th><th>Motivo</th><th>Estado</th><th>Respuesta Admin</th><th>Acción</th></tr>
+                {% for s in solicitudes %}
+                <tr>
+                    <td>{{ s.fecha }}</td>
+                    <td>{{ s.motivo }}</td>
+                    <td class="{% if 'Aprobada' in s.estado %}estado-aprobada{% elif s.estado=='Rechazada' or s.estado=='Cancelada' %}estado-rechazada{% elif s.estado=='Pide Cancelación' %}estado-pide-cancelacion{% else %}estado-pendiente{% endif %}">{{ s.estado }}</td>
+                    <td style="font-size:12px; color:#666;">{{ s.mensaje_admin if s.mensaje_admin else '-' }}</td>
+                    <td>
+                        {% if 'Aprobada' in s.estado and s.mensaje_admin != 'Registro Administrativo Directo' %}
+                        <form action="{{ url_for('solicitar_cancelacion', id=s.id) }}" method="POST" style="margin:0;">
+                            <button type="submit" style="background:#ffebee; color:#d32f2f; padding:5px 10px; border-radius:4px; border:none; cursor:pointer; font-size:12px; font-weight:bold;" onclick="return confirm('¿Seguro que deseas cancelar este permiso?');">Cancelar</button>
+                        </form>
+                        {% elif s.mensaje_admin == 'Registro Administrativo Directo' %}
+                            <span style="font-size: 11px; color: #999;">-</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </table>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Horarios IA - Admin</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap');
+        body { font-family: 'Montserrat', sans-serif; background-color: #f4f7f6; margin: 0; display: flex; height: 100vh; color: #1a365d; }
+        .sidebar { width: 250px; background-color: #003366; color: white; padding: 20px; box-sizing: border-box; }
+        .brand { color: #ff6b00; font-size: 20px; font-weight: 700; line-height: 1.1; margin-bottom: 40px; }
+        .brand span { color: white; font-size: 12px; }
+        .menu-item { padding: 15px 10px; margin-bottom: 5px; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; color: #a0aec0; text-decoration: none; display: block;}
+        .menu-item.active { background-color: #ff6b00; color: white; }
+        .menu-item:hover:not(.active) { background-color: rgba(255,255,255,0.1); }
+        .main-content { flex: 1; padding: 40px; overflow-y: auto; }
+        .header-container { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+        .header-container h1 { margin: 0; color: #003366; }
+        .btn { background-color: #00bcd4; color: white; padding: 12px 24px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; text-decoration: none; display: inline-block;}
+        .btn:hover { background-color: #0097a7; }
+        
+        .btn-action-delete { background-color: #ffebee; color: #c62828; padding: 6px 12px; border-radius: 6px; font-weight: 600; font-size: 12px; cursor: pointer; border: none; transition: background 0.2s; }
+        .btn-action-delete:hover { background-color: #ffcdd2; }
+        
+        .btn-danger-outline { background-color: #fff; color: #c62828; border: 2px solid #ffebee; padding: 10px 20px; border-radius: 8px; font-weight: bold; cursor: pointer; text-decoration: none; display: inline-block; transition: all 0.2s;}
+        .btn-danger-outline:hover { background-color: #ffebee; border-color: #ffcdd2; }
+        
+        .empleado-card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 30px; }
+        .empleado-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 2px solid #f4f7f6; padding-bottom: 10px;}
+        .empleado-header h2 { margin: 0; color: #003366; font-size: 20px; }
+        
+        .badge-group { display: flex; gap: 15px; align-items: center; }
+        .rol-badge { background-color: #fff3e0; color: #d84315; padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: bold;}
+        .rol-badge.comodin { background-color: #e3f2fd; color: #0277bd; }
+        
+        table { width: 100%; border-collapse: collapse; }
+        th { color: #a0aec0; padding: 10px 15px; font-size: 12px; text-transform: uppercase; text-align: center; }
+        td { padding: 12px 15px; border-bottom: 1px solid #eee; font-size: 14px; font-weight: 600; text-align: center; }
+        
+        .fila-descanso { background-color: #f8f9fa; }
+        .fila-descanso td { color: #90a4ae; font-weight: normal; }
+        
+        .alert { background-color: #e0f2f1; border-left: 4px solid #00bcd4; padding: 15px; margin-bottom: 20px; color: #008ba3; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <div class="brand">Bienestar<br>Comunitario<br><span>FARMACÉUTICO</span></div>
+        <a href="{{ url_for('admin_dashboard') }}" class="menu-item">👥 Empleados Activos</a>
+        <a href="{{ url_for('admin_farmacias') }}" class="menu-item">🏥 Sucursales</a>
+        <a href="{{ url_for('ver_horarios_ia') }}" class="menu-item active">🧠 Generación IA</a>
+        <a href="{{ url_for('admin_solicitudes') }}" class="menu-item">📩 Permisos y Bajas</a>
+        <div style="margin-top: 50px;">
+            <p style="font-size:12px; color:#a0aec0;">Usuario: Admin</p>
+            <a href="{{ url_for('logout') }}" class="logout" style="color:#ff6b00; font-weight:bold; text-decoration:none; font-size:14px;">Cerrar Sesión</a>
+        </div>
+    </div>
+    
+    <div class="main-content">
+        <div class="header-container">
+            <h1>Generación de Horarios Semanales</h1>
+            
+            <div style="display:flex; gap:10px;">
+                <form action="{{ url_for('limpiar_horarios_todo') }}" method="POST" style="margin:0;">
+                    <button type="submit" class="btn-danger-outline" onclick="return confirm('¿Seguro que deseas ELIMINAR TODOS los horarios y asignaciones manuales actuales? Empezarás de cero.');">
+                        🗑️ Limpiar Todo
+                    </button>
+                </form>
+                <a href="{{ url_for('ejecutar_ia') }}" class="btn">🧠 Ejecutar Motor OR-Tools</a>
+            </div>
+        </div>
+        
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="alert" {% if category == 'error' %}style="border-left-color:#d32f2f; color:#c62828; background:#ffebee;"{% endif %}>
+                  {{ message }}
+              </div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+        
+        {% if empleados_agrupados %}
+            
+            {% for emp_nombre, data in empleados_agrupados.items() %}
+            <div class="empleado-card">
+                
+                <div class="empleado-header">
+                    <h2>{{ emp_nombre }}</h2>
+                    
+                    <div class="badge-group">
+                        <span class="rol-badge {% if data.rol == 'Comodin' %}comodin{% endif %}">{{ data.rol }}</span>
+                        
+                        <form action="{{ url_for('limpiar_horario_empleado', empleado_id=data.id) }}" method="POST" style="margin:0;">
+                            <button type="submit" class="btn-action-delete" onclick="return confirm('¿Limpiar los horarios de este empleado?');">
+                                Eliminar Horario
+                            </button>
+                        </form>
+                    </div>
+                </div>
+                
+                <table>
+                    <tr>
+                        <th width="30%">DÍA</th>
+                        <th width="35%">SUCURSAL ASIGNADA</th>
+                        <th width="35%">HORARIO DE SUCURSAL</th>
+                    </tr>
+                    
+                    {% set dias_semana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'] %}
+                    
+                    {% for i in range(7) %}
+                        {% set turno = data.dias.get(i) %}
+                        
+                        {% if turno %}
+                            {% if turno == 'Permiso Aprobado' %}
+                            <tr class="fila-descanso">
+                                <td>{{ dias_semana[i] }}</td>
+                                <td style="color: #b0bec5; font-weight: bold; font-style: italic;">Permiso Aprobado</td>
+                                <td style="color: #b0bec5; font-style: italic;">-</td>
+                            </tr>
+                            {% elif turno == 'Suspensión' %}
+                            <tr style="background-color: #ffebee;">
+                                <td>{{ dias_semana[i] }}</td>
+                                <td style="color: #c62828; font-weight: bold;">Suspensión</td>
+                                <td style="color: #c62828; font-style: italic;">-</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td>{{ dias_semana[i] }}</td>
+                                <td style="color:#ff6b00;">{{ turno }}</td>
+                                <td>8 AM - 6:00 PM</td>
+                            </tr>
+                            {% endif %}
+                        {% else %}
+                            <tr class="fila-descanso">
+                                <td>{{ dias_semana[i] }}</td>
+                                <td style="font-style: italic;">-</td>
+                                <td style="font-style: italic;">Descanso</td>
+                            </tr>
+                        {% endif %}
+                        
+                    {% endfor %}
+                </table>
+            </div>
+            {% endfor %}
+            
+        {% else %}
+            <div class="empleado-card">
+                <p style="color:#666; text-align:center; padding: 40px; margin: 0; font-size:16px;">
+                    No se ha generado ninguna programación esta semana. Presiona el botón <b>"🧠 Ejecutar Motor OR-Tools"</b> arriba.
+                </p>
+            </div>
+        {% endif %}
+        
+    </div>
+</body>
+</html>

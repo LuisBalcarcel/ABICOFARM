@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>{% if empleado %}Editar{% else %}Nuevo{% endif %} Empleado</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap');
+        body { font-family: 'Montserrat', sans-serif; background-color: #f4f7f6; margin: 0; padding: 40px; color: #003366; }
+        .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        h1 { margin-top: 0; color: #ff6b00; }
+        .form-group { margin-bottom: 20px; }
+        label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+        input[type="text"], input[type="password"], input[type="time"], select { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 8px; font-family: 'Montserrat'; box-sizing: border-box; }
+        .time-row { display: flex; gap: 20px; }
+        .time-row > div { flex: 1; }
+        .checkbox-group { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-size: 14px; }
+        .checkbox-group input { width: auto; transform: scale(1.5); }
+        .btn { background-color: #00bcd4; color: white; border: none; padding: 14px 20px; border-radius: 8px; font-weight: 700; cursor: pointer; text-decoration: none; display: inline-block;}
+        .btn-cancel { background-color: #eee; color: #333; margin-left: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>{% if empleado %}Editar Empleado: {{ empleado.nombre }}{% else %}Registrar Nuevo Empleado{% endif %}</h1>
+        
+        <form method="POST">
+            <div class="form-group">
+                <label>Nombre Completo</label>
+                <input type="text" name="nombre" value="{{ empleado.nombre if empleado else '' }}" required>
+            </div>
+
+            <div class="form-group">
+                <label>Rol del Sistema</label>
+                <select name="rol" id="rolSelect" required>
+                    <option value="Dependiente" {% if empleado and empleado.rol == 'Dependiente' %}selected{% endif %}>Dependiente</option>
+                    <option value="Comodin" {% if empleado and empleado.rol == 'Comodin' %}selected{% endif %}>Comodín</option>
+                    <option value="Admin" {% if empleado and empleado.rol == 'Admin' %}selected{% endif %}>Administrador</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Sucursal Asignada (Dejar en blanco si es Comodín/Admin)</label>
+                <select name="farmacia_id">
+                    <option value="">-- Ninguna --</option>
+                    {% for f in farmacias %}
+                    <option value="{{ f.id }}" {% if empleado and empleado.farmacia_id == f.id %}selected{% endif %}>{{ f.nombre }} ({{ f.jornada }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Nuevo bloque de horario separado -->
+            <div class="form-group">
+                <label>Horario Base</label>
+                <div class="time-row">
+                    <div>
+                        <label style="font-size: 12px; color: #666;">Hora de Entrada</label>
+                        <input type="time" name="hora_inicio" id="horaInicio" value="{{ empleado.horario.split(' - ')[0] if empleado and ' - ' in empleado.horario else '' }}">
+                    </div>
+                    <div>
+                        <label style="font-size: 12px; color: #666;">Hora de Salida</label>
+                        <input type="time" name="hora_fin" id="horaFin" value="{{ empleado.horario.split(' - ')[1] if empleado and ' - ' in empleado.horario else '' }}">
+                    </div>
+                </div>
+                
+                <div class="checkbox-group">
+                    <input type="checkbox" name="es_comodin" id="checkComodin" value="1" {% if empleado and empleado.horario == 'SE AJUSTA A LA NECESIDAD' %}checked{% endif %}>
+                    <label for="checkComodin" style="margin-bottom:0;">Horario variable (Se ajusta a la necesidad)</label>
+                </div>
+            </div>
+
+            <!-- NUEVO CAMPO: DÍA DE DESCANSO FIJO -->
+            <div class="form-group">
+                <label style="color: #387015;">Día de Descanso Fijo (Excepción Permanente)</label>
+                <select name="dia_descanso_fijo" style="border-color: #d4dfcc; background-color: #f8fbf8;">
+                    <option value="">Ninguno (Rotativo normal por IA)</option>
+                    <option value="0" {% if empleado and empleado.dia_descanso_fijo == 0 %}selected{% endif %}>Lunes</option>
+                    <option value="1" {% if empleado and empleado.dia_descanso_fijo == 1 %}selected{% endif %}>Martes</option>
+                    <option value="2" {% if empleado and empleado.dia_descanso_fijo == 2 %}selected{% endif %}>Miércoles</option>
+                    <option value="3" {% if empleado and empleado.dia_descanso_fijo == 3 %}selected{% endif %}>Jueves</option>
+                    <option value="4" {% if empleado and empleado.dia_descanso_fijo == 4 %}selected{% endif %}>Viernes</option>
+                    <option value="5" {% if empleado and empleado.dia_descanso_fijo == 5 %}selected{% endif %}>Sábado</option>
+                    <option value="6" {% if empleado and empleado.dia_descanso_fijo == 6 %}selected{% endif %}>Domingo</option>
+                </select>
+                <p style="font-size: 11px; color: #666; margin-top: 5px;">
+                    *Útil para estudiantes o religiones. La IA <b>nunca</b> asignará turnos en este día para este empleado.
+                </p>
+            </div>
+
+            <hr style="border: 0; border-top: 1px solid #eee; margin: 30px 0;">
+            <h3 style="margin-top:0;">Credenciales de Acceso</h3>
+
+            <div class="form-group">
+                <label>Nombre de Usuario</label>
+                <input type="text" name="username" value="{{ empleado.username if empleado else '' }}" required>
+            </div>
+
+            <div class="form-group">
+                <label>Contraseña {% if empleado %}(Dejar en blanco para mantener la actual){% endif %}</label>
+                <input type="password" name="password" {% if not empleado %}required{% endif %}>
+            </div>
+
+            <button type="submit" class="btn">Guardar Empleado</button>
+            <a href="{{ url_for('admin_dashboard') }}" class="btn btn-cancel">Cancelar</a>
+        </form>
+    </div>
+
+    <script>
+        // Lógica para deshabilitar las horas si marca el checkbox de comodín
+        const checkComodin = document.getElementById('checkComodin');
+        const horaInicio = document.getElementById('horaInicio');
+        const horaFin = document.getElementById('horaFin');
+
+        function toggleHoras() {
+            if(checkComodin.checked) {
+                horaInicio.disabled = true;
+                horaFin.disabled = true;
+                horaInicio.value = "";
+                horaFin.value = "";
+            } else {
+                horaInicio.disabled = false;
+                horaFin.disabled = false;
+                horaInicio.required = true;
+                horaFin.required = true;
+            }
+        }
+        
+        checkComodin.addEventListener('change', toggleHoras);
+        toggleHoras(); // Ejecutar al cargar
+    </script>
+</body>
+</html>

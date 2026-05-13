@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Login - Bienestar Comunitario</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap');
+        body { font-family: 'Montserrat', sans-serif; background-color: #f4f7f6; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .login-card { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); width: 100%; max-width: 350px; text-align: center; }
+        .logo-text { color: #ff6b00; font-size: 24px; font-weight: 700; line-height: 1.2; margin-bottom: 5px; }
+        .logo-sub { color: #003366; font-size: 14px; font-weight: 600; margin-bottom: 10px; }
+        .form-title { color: #00bcd4; font-size: 16px; font-weight: 700; margin-bottom: 25px; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #eee; padding-bottom: 10px;}
+        .input-group { text-align: left; margin-bottom: 20px; }
+        .input-group label { display: block; color: #003366; font-size: 13px; font-weight: 600; margin-bottom: 8px; }
+        .input-group input { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; font-family: 'Montserrat', sans-serif; }
+        .btn { background-color: #ff6b00; color: white; border: none; padding: 14px; border-radius: 8px; width: 100%; font-weight: 700; font-size: 16px; cursor: pointer; transition: 0.3s; font-family: 'Montserrat', sans-serif;}
+        .btn:hover { background-color: #e65c00; }
+        .error { color: #a12c7b; font-size: 13px; font-weight: bold; margin-bottom: 15px; }
+        .hint { margin-top: 20px; font-size: 12px; color: #666; text-align: left; background: #eee; padding: 10px; border-radius: 6px;}
+    </style>
+</head>
+<body>
+    <div class="login-card">
+        <div class="logo-text">Bienestar Comunitario</div>
+        <div class="logo-sub">FARMACÉUTICO</div>
+        <div class="form-title">Login / Acceso al Sistema</div>
+
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}
+            <div class="error">{{ messages[0] }}</div>
+          {% endif %}
+        {% endwith %}
+
+        <form method="POST" action="/">
+            <div class="input-group">
+                <label>Usuario</label>
+                <input type="text" name="username" placeholder="Usuario" required>
+            </div>
+            <div class="input-group">
+                <label>Contraseña</label>
+                <input type="password" name="password" placeholder="Contraseña" required>
+            </div>
+            <button type="submit" class="btn">Iniciar Sesión</button>
+        </form>
+
+        
+    </div>
+</body>
+</html>

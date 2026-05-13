@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Panel Admin - Farmacia</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap');
+        body { font-family: 'Montserrat', sans-serif; background-color: #f4f7f6; margin: 0; display: flex; height: 100vh; color: #1a365d; }
+        .sidebar { width: 250px; background-color: #003366; color: white; padding: 20px; box-sizing: border-box; }
+        .brand { color: #ff6b00; font-size: 20px; font-weight: 700; line-height: 1.1; margin-bottom: 40px; }
+        .brand span { color: white; font-size: 12px; }
+        .menu-item { padding: 15px 10px; margin-bottom: 5px; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; color: #a0aec0; text-decoration: none; display: block;}
+        .menu-item.active { background-color: #ff6b00; color: white; }
+        .menu-item:hover:not(.active) { background-color: rgba(255,255,255,0.1); }
+        .main-content { flex: 1; padding: 40px; overflow-y: auto; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+        .header h1 { margin: 0; color: #003366; }
+        .btn-ia { background-color: #00bcd4; color: white; padding: 12px 24px; border: none; border-radius: 8px; font-weight: bold; font-family: 'Montserrat'; cursor: pointer; box-shadow: 0 4px 10px rgba(0,188,212,0.3); text-decoration: none;}
+        .btn-new { background-color: #ff6b00; color: white; padding: 10px 20px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 14px;}
+        .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 30px;}
+        table { width: 100%; border-collapse: collapse; text-align: left; }
+        th { background-color: #f4f7f6; color: #003366; padding: 15px; font-size: 13px; }
+        td { padding: 15px; border-bottom: 1px solid #eee; font-size: 14px; font-weight: 600; }
+        .tag-admin { background-color: #e0f2f1; color: #00bcd4; padding: 4px 8px; border-radius: 6px; font-size: 12px; }
+        .logout { color: #ff6b00; font-weight: bold; text-decoration: none; font-size: 14px;}
+        .action-link { color: #003366; text-decoration: none; font-size: 13px; margin-right: 10px; background: #eee; padding: 5px 10px; border-radius: 4px;}
+        .action-link.delete { background: #fee2e2; color: #b91c1c; }
+    </style>
+</head>
+<body>
+        <div class="sidebar">
+        <div class="brand">Bienestar<br>Comunitario<br><span>FARMACÉUTICO</span></div>
+        <a href="{{ url_for('admin_dashboard') }}" class="menu-item active">👥 Empleados Activos</a>
+        <a href="{{ url_for('admin_farmacias') }}" class="menu-item">🏥 Sucursales</a>
+        <a href="{{ url_for('ver_horarios_ia') }}" class="menu-item">🧠 Generación IA</a>
+        <a href="{{ url_for('admin_solicitudes') }}" class="menu-item">📩 Permisos y Bajas</a>
+        
+        <div style="margin-top: 50px;">
+            <p style="font-size:12px; color:#a0aec0;">Usuario: {{ session.get('nombre', 'Admin') }}</p>
+            <a href="{{ url_for('logout') }}" class="logout" style="color:#ff6b00; font-weight:bold; text-decoration:none; font-size:14px;">Cerrar Sesión</a>
+        </div>
+    </div>
+    
+    <div class="main-content">
+        <div class="header">
+            <h1>Base de Datos del Personal</h1>
+            <a href="{{ url_for('ver_horarios_ia') }}" class="btn-ia" style="text-decoration:none;">🧠 Motor OR-Tools</a>
+        </div>
+        
+        <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h3 style="margin:0;">Nómina de Empleados</h3>
+                <a href="{{ url_for('nuevo_empleado') }}" class="btn-new">+ Nuevo Empleado</a>
+            </div>
+            <table>
+                <tr>
+                    <th>NOMBRE</th>
+                    <th>ROL</th>
+                    <th>SUCURSAL ACTUAL</th>
+                    <th>HORARIO BASE</th>
+                    <th>ACCIONES</th>
+                </tr>
+                {% for e in empleados %}
+                <tr>
+                    <td>{{ e.nombre }}</td>
+                    <td>
+                        {% if e.rol == 'Admin' %}
+                            <span class="tag-admin">Administrador</span>
+                        {% else %}
+                            {{ e.rol }}
+                        {% endif %}
+                    </td>
+                    <td>{{ e.farmacia.nombre if e.farmacia else 'Comodín / Variable' }}</td>
+                    <td style="color:#666;">{{ e.horario }}</td>
+                                        <td>
+                        <!-- NUEVO BOTÓN MAGICO -->
+                        <a href="{{ url_for('asignar_temporal', emp_id=e.id) }}" style="background:#e1f5fe; color:#0288d1; padding:5px 10px; border-radius:4px; text-decoration:none; font-size:12px; font-weight:bold; margin-right:5px;">Asignar</a>
+                        
+                        <a href="{{ url_for('editar_empleado', id=e.id) }}" class="action-link">Editar</a>
+                        <a href="{{ url_for('eliminar_empleado', id=e.id) }}" class="action-link delete" onclick="return confirm('¿Eliminar a {{ e.nombre }}?');">Eliminar</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </table>
+        </div>
+    </div>
+</body>
+</html>
