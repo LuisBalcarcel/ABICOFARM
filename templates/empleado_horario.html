@@ -12,6 +12,23 @@
         .menu-item { padding: 15px 10px; margin-bottom: 5px; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; color: #a0aec0; text-decoration: none; display: block; }
         .menu-item.active { background-color: #ff6b00; color: white; }
         .main-content { flex: 1; padding: 40px; }
+        .banner-actualizado {
+            background: #ff6b00;
+            color: white;
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            opacity: 0;
+            transform: translateY(-6px);
+            transition: opacity 0.3s ease, transform 0.3s ease;
+            display: none;
+        }
+        .banner-actualizado.mostrar {
+            display: block;
+            opacity: 1;
+            transform: translateY(0);
+        }
         .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
         table { width: 100%; border-collapse: collapse; margin-top: 15px; }
         td, th { padding: 10px; border-bottom: 1px solid #eee; font-size: 13px; text-align: center; }
@@ -31,6 +48,7 @@
     </div>
 
     <div class="main-content">
+        <div id="banner-actualizado" class="banner-actualizado">📅 Tu horario ha sido actualizado</div>
         <div class="card">
             <h3 style="margin-top:0; color:#00bcd4;">Tu Horario Oficial semanal</h3>
             <table class="horario-table">
@@ -47,7 +65,7 @@
                         {% set turno = mi_horario.get(i) %}
                         {% if turno %}
                             {% if turno == 'Permiso Aprobado' %}
-                            <tr>
+                            <tr data-dia-index="{{ i }}">
                                 <td>
                                     <b>{{ dias_semana[i] }}</b><br>
                                     <span style="font-size:11px; color:#999;">{{ fechas_semana[i] }}</span>
@@ -56,7 +74,7 @@
                                 <td style="color: #b0bec5; font-style: italic;">-</td>
                             </tr>
                             {% elif turno == 'Suspensión' %}
-                            <tr style="background-color: #ffebee;">
+                            <tr data-dia-index="{{ i }}" style="background-color: #ffebee;">
                                 <td>
                                     <b style="color: #c62828;">{{ dias_semana[i] }}</b><br>
                                     <span style="font-size:11px; color:#c62828; opacity: 0.8;">{{ fechas_semana[i] }}</span>
@@ -65,7 +83,7 @@
                                 <td style="color: #c62828; font-style: italic;">-</td>
                             </tr>
                             {% else %}
-                            <tr>
+                            <tr data-dia-index="{{ i }}">
                                 <td>
                                     <b>{{ dias_semana[i] }}</b><br>
                                     <span style="font-size:11px; color:#999;">{{ fechas_semana[i] }}</span>
@@ -75,7 +93,7 @@
                             </tr>
                             {% endif %}
                         {% else %}
-                            <tr>
+                            <tr data-dia-index="{{ i }}">
                                 <td>
                                     <b>{{ dias_semana[i] }}</b><br>
                                     <span style="font-size:11px; color:#999;">{{ fechas_semana[i] }}</span>
@@ -91,88 +109,121 @@
     </div>
 
     <script>
-        const diasSemana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+        function normalizarTexto(valor) {
+            return (valor || '').trim();
+        }
 
-        function renderHorario(data) {
-            const body = document.getElementById('horario-body');
-            if (!body) {
+        function construirFila(item, indice) {
+            const fechaVisible = item.fecha.split('-').reverse().join('/');
+
+            if (item.sucursal === 'Permiso Aprobado') {
+                return `
+                    <td>
+                        <b>${item.dia}</b><br>
+                        <span style="font-size:11px; color:#999;">${fechaVisible}</span>
+                    </td>
+                    <td style="color: #b0bec5; font-weight: bold; font-style: italic;">Permiso Aprobado</td>
+                    <td style="color: #b0bec5; font-style: italic;">-</td>
+                `;
+            }
+
+            if (item.sucursal === 'Suspensión') {
+                return `
+                    <td>
+                        <b style="color: #c62828;">${item.dia}</b><br>
+                        <span style="font-size:11px; color:#c62828; opacity: 0.8;">${fechaVisible}</span>
+                    </td>
+                    <td style="color: #c62828; font-weight: bold;">Suspensión</td>
+                    <td style="color: #c62828; font-style: italic;">-</td>
+                `;
+            }
+
+            if (item.sucursal === '-' && item.horario === 'Descanso') {
+                return `
+                    <td>
+                        <b>${item.dia}</b><br>
+                        <span style="font-size:11px; color:#999;">${fechaVisible}</span>
+                    </td>
+                    <td style="font-style: italic;">-</td>
+                    <td style="font-style: italic;">Descanso</td>
+                `;
+            }
+
+            return `
+                <td>
+                    <b>${item.dia}</b><br>
+                    <span style="font-size:11px; color:#999;">${fechaVisible}</span>
+                </td>
+                <td style="color:#ff6b00; font-weight:bold;">${item.sucursal}</td>
+                <td>${item.horario}</td>
+            `;
+        }
+
+        function aplicarEstiloFila(fila, item) {
+            if (!fila) {
                 return;
             }
 
-            const miHorario = data.mi_horario || {};
-            const fechas = data.fechas_semana || [];
-            let html = '';
-
-            for (let i = 0; i < 7; i++) {
-                const turno = miHorario[String(i)];
-                const fechaTexto = fechas[i] || '';
-
-                if (turno) {
-                    if (turno === 'Permiso Aprobado') {
-                        html += `
-                            <tr>
-                                <td>
-                                    <b>${diasSemana[i]}</b><br>
-                                    <span style="font-size:11px; color:#999;">${fechaTexto}</span>
-                                </td>
-                                <td style="color: #b0bec5; font-weight: bold; font-style: italic;">Permiso Aprobado</td>
-                                <td style="color: #b0bec5; font-style: italic;">-</td>
-                            </tr>
-                        `;
-                    } else if (turno === 'Suspensión') {
-                        html += `
-                            <tr style="background-color: #ffebee;">
-                                <td>
-                                    <b style="color: #c62828;">${diasSemana[i]}</b><br>
-                                    <span style="font-size:11px; color:#c62828; opacity: 0.8;">${fechaTexto}</span>
-                                </td>
-                                <td style="color: #c62828; font-weight: bold;">Suspensión</td>
-                                <td style="color: #c62828; font-style: italic;">-</td>
-                            </tr>
-                        `;
-                    } else {
-                        html += `
-                            <tr>
-                                <td>
-                                    <b>${diasSemana[i]}</b><br>
-                                    <span style="font-size:11px; color:#999;">${fechaTexto}</span>
-                                </td>
-                                <td style="color:#ff6b00; font-weight:bold;">${turno}</td>
-                                <td>8 AM - 6:00 PM</td>
-                            </tr>
-                        `;
-                    }
-                } else {
-                    html += `
-                        <tr>
-                            <td>
-                                <b>${diasSemana[i]}</b><br>
-                                <span style="font-size:11px; color:#999;">${fechaTexto}</span>
-                            </td>
-                            <td style="font-style: italic;">-</td>
-                            <td style="font-style: italic;">Descanso</td>
-                        </tr>
-                    `;
-                }
+            if (item.sucursal === 'Suspensión') {
+                fila.style.backgroundColor = '#ffebee';
+            } else {
+                fila.style.backgroundColor = '';
             }
-
-            body.innerHTML = html;
         }
 
-        async function refrescarEstadoEmpleado() {
+        function mostrarBanner() {
+            const banner = document.getElementById('banner-actualizado');
+            if (!banner) {
+                return;
+            }
+            banner.classList.add('mostrar');
+            setTimeout(() => {
+                banner.classList.remove('mostrar');
+            }, 4000);
+        }
+
+        let ultimoHorario = [];
+
+        async function refrescarHorario() {
             try {
-                const resp = await fetch('/empleado/estado', { cache: 'no-store' });
+                const resp = await fetch('/empleado/horario/json', { cache: 'no-store' });
                 if (!resp.ok) {
                     return;
                 }
                 const data = await resp.json();
-                renderHorario(data);
+                if (!Array.isArray(data) || data.length !== 7) {
+                    return;
+                }
+
+                let huboCambios = false;
+                data.forEach((item, index) => {
+                    const previo = ultimoHorario[index];
+                    const cambio = !previo ||
+                        normalizarTexto(previo.sucursal) !== normalizarTexto(item.sucursal) ||
+                        normalizarTexto(previo.horario) !== normalizarTexto(item.horario);
+
+                    if (cambio) {
+                        const fila = document.querySelector(`tr[data-dia-index="${index}"]`);
+                        if (fila) {
+                            fila.innerHTML = construirFila(item, index);
+                            aplicarEstiloFila(fila, item);
+                        }
+                        huboCambios = true;
+                    }
+                });
+
+                if (huboCambios) {
+                    mostrarBanner();
+                }
+
+                ultimoHorario = data;
             } catch (err) {
                 console.error('Error al actualizar horario del empleado', err);
             }
         }
 
-        setInterval(refrescarEstadoEmpleado, 15000);
+        refrescarHorario();
+        setInterval(refrescarHorario, 30000);
     </script>
 </body>
 </html>

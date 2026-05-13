@@ -177,10 +177,49 @@ def registrar_ausencia_admin():
 @app.route('/admin/solicitudes/estado/<int:id>/<estado>')
 def cambiar_estado_solicitud(id, estado):
     solicitud = Solicitud.query.get(id)
-    if solicitud and estado in ['Aprobada', 'Rechazada']:
+    if not solicitud or estado not in ['Aprobada', 'Rechazada']:
+        return jsonify({'status': 'error', 'mensaje': 'Solicitud no encontrada'}), 404
+
+    if estado == 'Rechazada':
         solicitud.estado = estado
         db.session.commit()
-    return redirect(url_for('admin_solicitudes'))
+        return jsonify({'status': 'ok', 'mensaje': 'Solicitud rechazada'})
+
+    solicitud.estado = estado
+
+    try:
+        dt = datetime.strptime(solicitud.fecha, '%Y-%m-%d')
+        dia_semana = dt.weekday()
+    except Exception:
+        dia_semana = None
+
+    turno = None
+    farmacia_id = None
+    if dia_semana is not None:
+        turno = HorarioGenerado.query.filter_by(empleado_id=solicitud.empleado_id, dia=dia_semana).first()
+        if turno:
+            farmacia_id = turno.farmacia_id
+            db.session.delete(turno)
+
+    if farmacia_id is not None and dia_semana is not None:
+        comodines = Empleado.query.filter_by(rol='Comodin').all()
+        comodin_disponible = None
+        for comodin in comodines:
+            ocupado = HorarioGenerado.query.filter_by(empleado_id=comodin.id, dia=dia_semana).first()
+            if not ocupado:
+                comodin_disponible = comodin
+                break
+
+        if comodin_disponible:
+            reemplazo = HorarioGenerado(
+                dia=dia_semana,
+                empleado_id=comodin_disponible.id,
+                farmacia_id=farmacia_id
+            )
+            db.session.add(reemplazo)
+
+    db.session.commit()
+    return jsonify({'status': 'ok', 'mensaje': 'Solicitud aprobada y horario actualizado'})
 
 @app.route('/admin/solicitudes/modificar/<int:id>', methods=['GET', 'POST'])
 def modificar_solicitud(id):
@@ -306,6 +345,70 @@ def empleado_estado():
         'solicitudes': solicitudes_payload,
         'fechas_semana': data['fechas_semana']
     })
+
+
+@app.route('/empleado/horario/json')
+def empleado_horario_json():
+    if 'user_id' not in session or session.get('rol') == 'Admin':
+        return jsonify({'status': 'error', 'mensaje': 'unauthorized'}), 401
+
+    empleado_id = session['user_id']
+    usuario = Empleado.query.get(empleado_id)
+    turnos = HorarioGenerado.query.filter_by(empleado_id=empleado_id).all()
+
+    aprobadas = Solicitud.query.filter(
+        Solicitud.empleado_id == empleado_id,
+        Solicitud.estado.in_(['Aprobada', 'Modificada (Aprobada)'])
+    ).all()
+    aprobadas_por_fecha = {s.fecha: s for s in aprobadas}
+
+    turnos_por_dia = {t.dia: t for t in turnos}
+
+    hoy = datetime.now()
+    inicio_semana = hoy - timedelta(days=hoy.weekday())
+    dias_nombre = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
+
+    resultado = []
+    for i in range(7):
+        fecha_dt = inicio_semana + timedelta(days=i)
+        fecha_iso = fecha_dt.strftime('%Y-%m-%d')
+        horario_texto = usuario.horario if usuario and usuario.horario else '8 AM - 6:00 PM'
+
+        if fecha_iso in aprobadas_por_fecha:
+            permiso = aprobadas_por_fecha[fecha_iso]
+            if permiso.mensaje_admin == 'Registro Administrativo Directo':
+                resultado.append({
+                    'dia': dias_nombre[i],
+                    'fecha': fecha_iso,
+                    'sucursal': 'Suspensión',
+                    'horario': '-'
+                })
+            else:
+                resultado.append({
+                    'dia': dias_nombre[i],
+                    'fecha': fecha_iso,
+                    'sucursal': 'Permiso Aprobado',
+                    'horario': '-'
+                })
+            continue
+
+        turno = turnos_por_dia.get(i)
+        if turno and turno.farmacia:
+            resultado.append({
+                'dia': dias_nombre[i],
+                'fecha': fecha_iso,
+                'sucursal': turno.farmacia.nombre,
+                'horario': horario_texto
+            })
+        else:
+            resultado.append({
+                'dia': dias_nombre[i],
+                'fecha': fecha_iso,
+                'sucursal': '-',
+                'horario': 'Descanso'
+            })
+
+    return jsonify(resultado)
 
 @app.route('/logout')
 def logout():
@@ -718,12 +821,10 @@ def confirmar_cancelacion(id):
     if solicitud and solicitud.estado == 'Pide Cancelación':
         solicitud.estado = 'Cancelada'
         db.session.commit()
-        
-        # Ejecutamos el recálculo de la IA automáticamente
-        flash('Cancelación aceptada. El motor de IA recalculó la semana automáticamente.', 'success')
-        return redirect(url_for('ejecutar_ia')) 
-        
-    return redirect(url_for('admin_solicitudes'))
+
+        return jsonify({'status': 'ok', 'mensaje': 'Solicitud cancelada'})
+
+    return jsonify({'status': 'error', 'mensaje': 'Solicitud no encontrada'}), 404
 
 # --- INICIALIZACIÓN Y CARGA DE DATOS (SEED) ---
 def seed_data():
