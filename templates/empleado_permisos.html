@@ -39,13 +39,14 @@
     <div class="main-content">
         <div class="card">
             <h3 style="margin-top:0;">Solicitar Permiso (Ausencia)</h3>
-            <form action="{{ url_for('nueva_solicitud_empleado') }}" method="POST">
+            <form id="solicitud-form" action="{{ url_for('nueva_solicitud_empleado') }}" method="POST">
                 <label>Fecha exacta a faltar:</label>
                 <input type="date" name="fecha" required>
                 <label>Motivo:</label>
                 <input type="text" name="motivo" placeholder="Ej. Cita médica, Asunto personal..." required>
                 <button type="submit">Enviar Solicitud</button>
             </form>
+            <div id="solicitud-mensaje" style="margin-top: 10px; font-size: 12px;"></div>
         </div>
 
         <div class="card">
@@ -131,7 +132,7 @@
 
         async function refrescarSolicitudes() {
             try {
-                const resp = await fetch('/empleado/estado', { cache: 'no-store' });
+                const resp = await fetch('/empleado/solicitudes/json', { cache: 'no-store' });
                 if (!resp.ok) {
                     return;
                 }
@@ -140,6 +141,50 @@
             } catch (err) {
                 console.error('Error al actualizar solicitudes del empleado', err);
             }
+        }
+
+        const form = document.getElementById('solicitud-form');
+        const mensajeEl = document.getElementById('solicitud-mensaje');
+
+        if (form) {
+            form.addEventListener('submit', async (event) => {
+                event.preventDefault();
+
+                if (mensajeEl) {
+                    mensajeEl.textContent = '';
+                }
+
+                try {
+                    const formData = new FormData(form);
+                    const resp = await fetch(form.action, {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    const data = await resp.json();
+                    if (!resp.ok || data.status !== 'ok') {
+                        if (mensajeEl) {
+                            mensajeEl.textContent = '❌ Error al enviar la solicitud';
+                            mensajeEl.style.color = '#d32f2f';
+                        }
+                        return;
+                    }
+
+                    if (mensajeEl) {
+                        mensajeEl.textContent = '✅ Solicitud enviada correctamente';
+                        mensajeEl.style.color = '#2e7d32';
+                    }
+
+                    form.reset();
+                    await refrescarSolicitudes();
+                } catch (err) {
+                    if (mensajeEl) {
+                        mensajeEl.textContent = '❌ Error al enviar la solicitud';
+                        mensajeEl.style.color = '#d32f2f';
+                    }
+                    console.error('Error enviando solicitud', err);
+                }
+            });
         }
 
         setInterval(refrescarSolicitudes, 15000);

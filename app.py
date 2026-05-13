@@ -669,14 +669,13 @@ def solicitar_cancelacion(id):
 @app.route('/empleado/solicitud/nueva', methods=['POST'])
 def nueva_solicitud_empleado():
     if 'user_id' not in session or session.get('rol') == 'Admin':
-        return redirect(url_for('login'))
+        return jsonify({'status': 'error', 'mensaje': 'unauthorized'}), 401
 
     fecha = request.form.get('fecha')
     motivo = request.form.get('motivo')
 
     if not fecha or not motivo:
-        flash('Debes completar la fecha y el motivo.', 'error')
-        return redirect(url_for('empleado_dashboard'))
+        return jsonify({'status': 'error', 'mensaje': 'Debes completar la fecha y el motivo.'}), 400
 
     nueva = Solicitud(
         empleado_id=session['user_id'],
@@ -688,8 +687,27 @@ def nueva_solicitud_empleado():
 
     db.session.add(nueva)
     db.session.commit()
-    flash('Solicitud enviada correctamente.', 'success')
-    return redirect(url_for('empleado_dashboard'))
+    return jsonify({'status': 'ok'})
+
+
+@app.route('/empleado/solicitudes/json')
+def empleado_solicitudes_json():
+    if 'user_id' not in session or session.get('rol') == 'Admin':
+        return jsonify({'status': 'error', 'mensaje': 'unauthorized'}), 401
+
+    empleado_id = session['user_id']
+    solicitudes = Solicitud.query.filter_by(empleado_id=empleado_id).order_by(Solicitud.id.desc()).all()
+    payload = []
+    for s in solicitudes:
+        payload.append({
+            'id': s.id,
+            'fecha': s.fecha,
+            'motivo': s.motivo,
+            'estado': s.estado,
+            'mensaje_admin': s.mensaje_admin or ''
+        })
+
+    return jsonify({'status': 'ok', 'solicitudes': payload})
 
 @app.route('/admin/solicitudes/confirmar_cancelacion/<int:id>')
 def confirmar_cancelacion(id):
