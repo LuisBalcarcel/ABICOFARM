@@ -32,7 +32,7 @@
     <div class="header">
         <div class="title">🛠️ Panel del Desarrollador — ABICOFARM v1.0</div>
         <div class="actions">
-            <button class="btn" id="btnActualizar">🔄 Actualizar datos</button>
+            <button class="btn" id="btnActualizar">🔄 Actualizar</button>
             <a href="{{ url_for('logout') }}" class="link">← Salir</a>
         </div>
     </div>
@@ -168,7 +168,7 @@
                     return;
                 }
                 const data = await resp.json();
-                usuariosCache = data.usuarios || [];
+                usuariosCache = Array.isArray(data) ? data : [];
                 renderTablas(usuariosCache);
             } catch (err) {
                 console.error('Error al cargar usuarios', err);

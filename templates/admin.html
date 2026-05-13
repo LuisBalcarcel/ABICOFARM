@@ -64,20 +64,39 @@
                 <tr>
                     <td>{{ e.nombre }}</td>
                     <td>
-                        {% if e.rol == 'Admin' %}
+                        {% if e.rol == 'Admin' or e.rol == 'Administrador' %}
                             <span class="tag-admin">Administrador</span>
                         {% else %}
                             {{ e.rol }}
                         {% endif %}
                     </td>
-                    <td>{{ e.farmacia.nombre if e.farmacia else 'Comodín / Variable' }}</td>
-                    <td style="color:#666;">{{ e.horario }}</td>
-                                        <td>
-                        <!-- NUEVO BOTÓN MAGICO -->
+                    <td>
+                        {% if e.rol == 'Admin' or e.rol == 'Administrador' %}
+                            N/A
+                        {% elif e.farmacia %}
+                            {{ e.farmacia.nombre }}
+                        {% else %}
+                            Comodín / Variable
+                        {% endif %}
+                    </td>
+                    <td style="color:#666;">
+                        {% if e.rol == 'Admin' or e.rol == 'Administrador' %}
+                            N/A
+                        {% elif e.horario == 'SE AJUSTA A LA NECESIDAD' %}
+                            SE AJUSTA A LA NECESIDAD
+                        {% elif e.horario and ' - ' in e.horario %}
+                            {{ e.horario }}
+                        {% else %}
+                            N/A
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if e.rol != 'Desarrollador' %}
                         <a href="{{ url_for('asignar_temporal', emp_id=e.id) }}" style="background:#e1f5fe; color:#0288d1; padding:5px 10px; border-radius:4px; text-decoration:none; font-size:12px; font-weight:bold; margin-right:5px;">Asignar</a>
                         
                         <a href="{{ url_for('editar_empleado', id=e.id) }}" class="action-link">Editar</a>
                         <a href="{{ url_for('eliminar_empleado', id=e.id) }}" class="action-link delete" onclick="return confirm('¿Eliminar a {{ e.nombre }}?');">Eliminar</a>
+                        {% endif %}
                     </td>
                 </tr>
                 {% endfor %}

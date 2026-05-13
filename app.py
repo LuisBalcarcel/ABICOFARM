@@ -4,6 +4,7 @@ from flask_sqlalchemy import SQLAlchemy
 import os
 from optimizer import generar_horario_semana 
 from datetime import datetime, timedelta
+from sqlalchemy import inspect, text
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev_secret_key')
@@ -131,7 +132,9 @@ def admin_dashboard():
     if 'user_id' not in session or session.get('rol') != 'Admin':
         return redirect(url_for('login'))
 
-    empleados = Empleado.query.all()
+    empleados = Empleado.query.filter(
+        Empleado.rol != 'Desarrollador'
+    ).all()
     farmacias = Farmacia.query.all()
     return render_template('admin.html', empleados=empleados, farmacias=farmacias, nombre=session['nombre'])
 
@@ -550,7 +553,7 @@ def dev_usuarios_json():
             'activo_ahora': bool(e.activo_ahora)
         })
 
-    return jsonify({'usuarios': payload})
+    return jsonify(payload)
 
 
 @app.route('/dev/reset-password/<int:id>', methods=['POST'])
@@ -614,18 +617,37 @@ def editar_empleado(id):
         return redirect(url_for('login'))
         
     empleado = Empleado.query.get(id)
+
+    def normalizar_hora(valor):
+        if not valor:
+            return ''
+        if hasattr(valor, 'strftime'):
+            return valor.strftime('%H:%M')
+        return str(valor)[:5] if isinstance(valor, str) and len(valor) >= 5 else str(valor)
+
     if request.method == 'POST':
         empleado.nombre = request.form.get('nombre', empleado.nombre)
         empleado.rol = request.form.get('rol', empleado.rol)
-        
-        # Procesar el horario a partir de los inputs de hora
-        if 'es_comodin' in request.form:
+
+        horario_variable = 'horario_variable' in request.form or 'es_comodin' in request.form
+        hora_entrada = request.form.get('hora_entrada', request.form.get('hora_inicio', '')).strip()
+        hora_salida = request.form.get('hora_salida', request.form.get('hora_fin', '')).strip()
+
+        if horario_variable:
             empleado.horario = "SE AJUSTA A LA NECESIDAD"
         else:
-            inicio = request.form.get('hora_inicio', '')
-            fin = request.form.get('hora_fin', '')
-            if inicio and fin:
-                empleado.horario = f"{inicio} - {fin}"
+            if not hora_entrada or not hora_salida:
+                farmacias = Farmacia.query.all()
+                return render_template(
+                    'empleado_form.html',
+                    farmacias=farmacias,
+                    empleado=empleado,
+                    hora_entrada_str=hora_entrada,
+                    hora_salida_str=hora_salida,
+                    horario_variable=horario_variable,
+                    error_horario='Por favor ingresa el horario base del empleado'
+                )
+            empleado.horario = f"{hora_entrada} - {hora_salida}"
 
         # Capturar y asignar el día fijo
         dia_fijo = request.form.get('dia_descanso_fijo')
@@ -642,7 +664,25 @@ def editar_empleado(id):
         return redirect(url_for('admin_dashboard'))
         
     farmacias = Farmacia.query.all()
-    return render_template('empleado_form.html', farmacias=farmacias, empleado=empleado)
+    hora_entrada_str = ''
+    hora_salida_str = ''
+    horario_variable = False
+    if empleado and empleado.horario and ' - ' in empleado.horario:
+        partes = empleado.horario.split(' - ')
+        if len(partes) == 2:
+            hora_entrada_str = normalizar_hora(partes[0])
+            hora_salida_str = normalizar_hora(partes[1])
+    elif empleado:
+        hora_entrada_str = normalizar_hora(getattr(empleado, 'hora_entrada', ''))
+        hora_salida_str = normalizar_hora(getattr(empleado, 'hora_salida', ''))
+
+    if empleado:
+        horario_variable = bool(getattr(empleado, 'horario_variable', False)) or empleado.horario == 'SE AJUSTA A LA NECESIDAD'
+
+    return render_template('empleado_form.html', farmacias=farmacias, empleado=empleado,
+                           hora_entrada_str=hora_entrada_str,
+                           hora_salida_str=hora_salida_str,
+                           horario_variable=horario_variable)
 
 @app.route('/admin/empleado/eliminar/<int:id>')
 def eliminar_empleado(id):
@@ -1003,7 +1043,7 @@ def empleado_solicitudes_json():
 
     return jsonify({'status': 'ok', 'solicitudes': payload})
 
-@app.route('/admin/solicitudes/confirmar_cancelacion/<int:id>')
+@app.route('/admin/solicitudes/confirmar_cancelacion/<int:id>', methods=['GET', 'POST'])
 def confirmar_cancelacion(id):
     if 'user_id' not in session or session.get('rol') != 'Admin':
         return redirect(url_for('login'))
@@ -1023,14 +1063,19 @@ def confirmar_cancelacion(id):
         empleado = Empleado.query.get(solicitud.empleado_id)
         if empleado and dia_semana is not None and empleado.farmacia_id is not None:
             HorarioGenerado.query.filter_by(empleado_id=empleado.id, dia=dia_semana).delete()
+            AsignacionTemporal.query.filter_by(empleado_id=empleado.id, fecha=solicitud.fecha).delete()
 
             if empleado.dia_descanso_fijo is None or empleado.dia_descanso_fijo != dia_semana:
-                turno_restaurado = HorarioGenerado(
-                    dia=dia_semana,
-                    empleado_id=empleado.id,
-                    farmacia_id=empleado.farmacia_id
-                )
-                db.session.add(turno_restaurado)
+                turno_restaurado = HorarioGenerado.query.filter_by(empleado_id=empleado.id, dia=dia_semana).first()
+                if turno_restaurado:
+                    turno_restaurado.farmacia_id = empleado.farmacia_id
+                else:
+                    turno_restaurado = HorarioGenerado(
+                        dia=dia_semana,
+                        empleado_id=empleado.id,
+                        farmacia_id=empleado.farmacia_id
+                    )
+                    db.session.add(turno_restaurado)
 
             turnos_cobertura = HorarioGenerado.query.filter_by(
                 farmacia_id=empleado.farmacia_id,
@@ -1100,8 +1145,31 @@ def seed_data():
 
     db.session.commit()
 
+
+def asegurar_columnas_empleado():
+    inspector = inspect(db.engine)
+    tablas = inspector.get_table_names()
+    if 'empleado' not in tablas:
+        return
+
+    columnas = {col['name'] for col in inspector.get_columns('empleado')}
+    sentencias = []
+
+    if 'ultimo_login' not in columnas:
+        sentencias.append('ALTER TABLE empleado ADD COLUMN ultimo_login TIMESTAMP')
+    if 'activo_ahora' not in columnas:
+        sentencias.append("ALTER TABLE empleado ADD COLUMN activo_ahora BOOLEAN DEFAULT false")
+
+    if not sentencias:
+        return
+
+    with db.engine.begin() as conn:
+        for sentencia in sentencias:
+            conn.execute(text(sentencia))
+
 with app.app_context():
     db.create_all()
+    asegurar_columnas_empleado()
     seed_data()
 
 if __name__ == '__main__':

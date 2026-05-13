@@ -87,15 +87,10 @@
         }
 
         function iniciarCuentaRegresiva(url) {
-            let segundos = 3;
-            const intervalo = setInterval(() => {
-                mostrarToast(`✅ Cambios guardados. Cerrando sesión en ${segundos} segundos...`, 'exito');
-                segundos -= 1;
-                if (segundos < 0) {
-                    clearInterval(intervalo);
-                    window.location.href = url;
-                }
-            }, 1000);
+            mostrarToast('✅ Cambios guardados. Cerrando sesión en 3 segundos...', 'exito');
+            setTimeout(() => {
+                window.location.href = url;
+            }, 3000);
         }
 
         if (form) {
@@ -125,12 +120,7 @@
                         return;
                     }
 
-                    if (data.redirect) {
-                        iniciarCuentaRegresiva(data.redirect);
-                        return;
-                    }
-
-                    mostrarToast('✅ Datos actualizados correctamente', 'exito');
+                    iniciarCuentaRegresiva(data.redirect || '/login?msg=updated');
                 } catch (err) {
                     console.error('Error al actualizar perfil', err);
                     mostrarToast('❌ Error al actualizar', 'error');

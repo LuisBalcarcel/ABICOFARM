@@ -17,11 +17,17 @@
         .checkbox-group input { width: auto; transform: scale(1.5); }
         .btn { background-color: #00bcd4; color: white; border: none; padding: 14px 20px; border-radius: 8px; font-weight: 700; cursor: pointer; text-decoration: none; display: inline-block;}
         .btn-cancel { background-color: #eee; color: #333; margin-left: 10px; }
+        .form-error { background: #ffebee; color: #c62828; padding: 10px 12px; border-radius: 8px; margin-bottom: 20px; font-size: 14px; font-weight: 600; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>{% if empleado %}Editar Empleado: {{ empleado.nombre }}{% else %}Registrar Nuevo Empleado{% endif %}</h1>
+        {% if error_horario %}
+        <div class="form-error" id="errorHorario">{{ error_horario }}</div>
+        {% else %}
+        <div class="form-error" id="errorHorario" style="display:none;"></div>
+        {% endif %}
         
         <form method="POST">
             <div class="form-group">
@@ -53,19 +59,19 @@
                 <div class="form-group" id="bloque-horario">
                     <label>Horario Base</label>
                     <div class="time-row">
-                        <div>
+                        <div id="grupoHoraEntrada">
                             <label style="font-size: 12px; color: #666;">Hora de Entrada</label>
-                            <input type="time" name="hora_inicio" id="horaInicio" value="{{ empleado.horario.split(' - ')[0] if empleado and ' - ' in empleado.horario else '' }}">
+                            <input type="time" name="hora_entrada" id="horaEntrada" value="{{ hora_entrada_str if hora_entrada_str is defined else '' }}">
                         </div>
-                        <div>
+                        <div id="grupoHoraSalida">
                             <label style="font-size: 12px; color: #666;">Hora de Salida</label>
-                            <input type="time" name="hora_fin" id="horaFin" value="{{ empleado.horario.split(' - ')[1] if empleado and ' - ' in empleado.horario else '' }}">
+                            <input type="time" name="hora_salida" id="horaSalida" value="{{ hora_salida_str if hora_salida_str is defined else '' }}">
                         </div>
                     </div>
                     
                     <div class="checkbox-group">
-                        <input type="checkbox" name="es_comodin" id="checkComodin" value="1" {% if empleado and empleado.horario == 'SE AJUSTA A LA NECESIDAD' %}checked{% endif %}>
-                        <label for="checkComodin" style="margin-bottom:0;">Horario variable (Se ajusta a la necesidad)</label>
+                        <input type="checkbox" name="horario_variable" id="checkHorarioVariable" value="1" {{ 'checked' if empleado and horario_variable else '' }}>
+                        <label for="checkHorarioVariable" style="margin-bottom:0;">Horario variable (Se ajusta a la necesidad)</label>
                     </div>
                 </div>
 
@@ -74,13 +80,11 @@
                     <label style="color: #387015;">Día de Descanso Fijo (Excepción Permanente)</label>
                     <select name="dia_descanso_fijo" style="border-color: #d4dfcc; background-color: #f8fbf8;">
                         <option value="">Ninguno (Rotativo normal por IA)</option>
-                        <option value="0" {% if empleado and empleado.dia_descanso_fijo == 0 %}selected{% endif %}>Lunes</option>
-                        <option value="1" {% if empleado and empleado.dia_descanso_fijo == 1 %}selected{% endif %}>Martes</option>
-                        <option value="2" {% if empleado and empleado.dia_descanso_fijo == 2 %}selected{% endif %}>Miércoles</option>
-                        <option value="3" {% if empleado and empleado.dia_descanso_fijo == 3 %}selected{% endif %}>Jueves</option>
-                        <option value="4" {% if empleado and empleado.dia_descanso_fijo == 4 %}selected{% endif %}>Viernes</option>
-                        <option value="5" {% if empleado and empleado.dia_descanso_fijo == 5 %}selected{% endif %}>Sábado</option>
-                        <option value="6" {% if empleado and empleado.dia_descanso_fijo == 6 %}selected{% endif %}>Domingo</option>
+                        {% for dia in range(7) %}
+                        <option value="{{ dia }}" {{ 'selected' if empleado and empleado.dia_descanso_fijo == dia else '' }}>
+                            {{ ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'][dia] }}
+                        </option>
+                        {% endfor %}
                     </select>
                     <p style="font-size: 11px; color: #666; margin-top: 5px;">
                         *Útil para estudiantes o religiones. La IA <b>nunca</b> asignará turnos en este día para este empleado.
@@ -111,10 +115,13 @@
     </div>
 
     <script>
-        // Lógica para deshabilitar las horas si marca el checkbox de comodín
-        const checkComodin = document.getElementById('checkComodin');
-        const horaInicio = document.getElementById('horaInicio');
-        const horaFin = document.getElementById('horaFin');
+        const form = document.querySelector('form');
+        const checkHorarioVariable = document.getElementById('checkHorarioVariable');
+        const horaEntrada = document.getElementById('horaEntrada');
+        const horaSalida = document.getElementById('horaSalida');
+        const grupoHoraEntrada = document.getElementById('grupoHoraEntrada');
+        const grupoHoraSalida = document.getElementById('grupoHoraSalida');
+        const errorHorario = document.getElementById('errorHorario');
         const rolSelect = document.getElementById('rolSelect');
         const bloqueHorarioSucursal = document.getElementById('bloque-horario-sucursal');
         const passwordInput = document.getElementById('passwordInput');
@@ -122,16 +129,20 @@
         const togglePassword = document.getElementById('togglePassword');
 
         function toggleHoras() {
-            if(checkComodin.checked) {
-                horaInicio.disabled = true;
-                horaFin.disabled = true;
-                horaInicio.value = "";
-                horaFin.value = "";
-            } else {
-                horaInicio.disabled = false;
-                horaFin.disabled = false;
-                horaInicio.required = true;
-                horaFin.required = true;
+            const esVariable = checkHorarioVariable && checkHorarioVariable.checked;
+            if (grupoHoraEntrada) {
+                grupoHoraEntrada.style.display = esVariable ? 'none' : 'block';
+            }
+            if (grupoHoraSalida) {
+                grupoHoraSalida.style.display = esVariable ? 'none' : 'block';
+            }
+            if (horaEntrada) {
+                horaEntrada.disabled = esVariable;
+                horaEntrada.required = !esVariable;
+            }
+            if (horaSalida) {
+                horaSalida.disabled = esVariable;
+                horaSalida.required = !esVariable;
             }
         }
 
@@ -205,11 +216,48 @@
             });
         }
         
-        if (checkComodin) {
-            checkComodin.addEventListener('change', toggleHoras);
+        if (checkHorarioVariable) {
+            checkHorarioVariable.addEventListener('change', toggleHoras);
+        }
+        if (horaEntrada) {
+            horaEntrada.addEventListener('input', () => {
+                if (errorHorario) {
+                    errorHorario.style.display = 'none';
+                }
+            });
+        }
+        if (horaSalida) {
+            horaSalida.addEventListener('input', () => {
+                if (errorHorario) {
+                    errorHorario.style.display = 'none';
+                }
+            });
+        }
+        if (checkHorarioVariable) {
+            checkHorarioVariable.addEventListener('change', () => {
+                if (errorHorario) {
+                    errorHorario.style.display = 'none';
+                }
+            });
         }
         if (rolSelect) {
             rolSelect.addEventListener('change', toggleRolFields);
+        }
+        if (form) {
+            form.addEventListener('submit', (event) => {
+                const esAdmin = rolSelect && rolSelect.value === 'Admin';
+                if (!esAdmin && checkHorarioVariable && !checkHorarioVariable.checked) {
+                    const entradaVacia = !horaEntrada || !horaEntrada.value;
+                    const salidaVacia = !horaSalida || !horaSalida.value;
+                    if (entradaVacia || salidaVacia) {
+                        event.preventDefault();
+                        if (errorHorario) {
+                            errorHorario.textContent = 'Por favor ingresa el horario base del empleado';
+                            errorHorario.style.display = 'block';
+                        }
+                    }
+                }
+            });
         }
         toggleHoras();
         toggleRolFields();
