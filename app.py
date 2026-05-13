@@ -147,7 +147,10 @@ def admin_forzar_cancelacion(id):
         solicitud.estado = 'Cancelada'
         db.session.commit()
         flash('Suspensión administrativa cancelada exitosamente. Se recomienda ejecutar el Motor de IA para actualizar.', 'success')
-        
+
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return jsonify({'status': 'ok', 'mensaje': 'Solicitud cancelada'})
+
     return redirect(url_for('admin_solicitudes'))
 
 # Procesa el formulario de suspensión/ausencia del admin
@@ -178,12 +181,16 @@ def registrar_ausencia_admin():
 def cambiar_estado_solicitud(id, estado):
     solicitud = Solicitud.query.get(id)
     if not solicitud or estado not in ['Aprobada', 'Rechazada']:
-        return jsonify({'status': 'error', 'mensaje': 'Solicitud no encontrada'}), 404
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'status': 'error', 'mensaje': 'Solicitud no encontrada'}), 404
+        return redirect(url_for('admin_solicitudes'))
 
     if estado == 'Rechazada':
         solicitud.estado = estado
         db.session.commit()
-        return jsonify({'status': 'ok', 'mensaje': 'Solicitud rechazada'})
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'status': 'ok', 'mensaje': 'Solicitud rechazada'})
+        return redirect(url_for('admin_solicitudes'))
 
     solicitud.estado = estado
 
@@ -219,7 +226,9 @@ def cambiar_estado_solicitud(id, estado):
             db.session.add(reemplazo)
 
     db.session.commit()
-    return jsonify({'status': 'ok', 'mensaje': 'Solicitud aprobada y horario actualizado'})
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return jsonify({'status': 'ok', 'mensaje': 'Solicitud aprobada y horario actualizado'})
+    return redirect(url_for('admin_solicitudes'))
 
 @app.route('/admin/solicitudes/modificar/<int:id>', methods=['GET', 'POST'])
 def modificar_solicitud(id):
@@ -822,9 +831,13 @@ def confirmar_cancelacion(id):
         solicitud.estado = 'Cancelada'
         db.session.commit()
 
-        return jsonify({'status': 'ok', 'mensaje': 'Solicitud cancelada'})
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'status': 'ok', 'mensaje': 'Solicitud cancelada'})
+        return redirect(url_for('admin_solicitudes'))
 
-    return jsonify({'status': 'error', 'mensaje': 'Solicitud no encontrada'}), 404
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return jsonify({'status': 'error', 'mensaje': 'Solicitud no encontrada'}), 404
+    return redirect(url_for('admin_solicitudes'))
 
 # --- INICIALIZACIÓN Y CARGA DE DATOS (SEED) ---
 def seed_data():
