@@ -91,7 +91,7 @@ def login():
             session['username'] = user.username
             session['login_time'] = datetime.utcnow().isoformat()
             session.permanent = False
-            if user.username.startswith('dev_'):
+            if user.rol == 'Desarrollador' or user.username.startswith('dev_'):
                 return redirect(url_for('dev_panel'))
             if user.rol == 'Admin':
                 return redirect(url_for('admin_dashboard'))
