@@ -1,0 +1,6 @@
+# Python cache and artifacts
+__pycache__/
+*.pyc
+
+# Local SQLite database
+instance/*.db
