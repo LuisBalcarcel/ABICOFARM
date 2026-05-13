@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Panel del Desarrollador - ABICOFARM</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap');
+        body { font-family: 'Montserrat', sans-serif; background: #0d1117; color: #e6edf3; margin: 0; }
+        .header { display: flex; justify-content: space-between; align-items: center; padding: 20px 30px; border-bottom: 1px solid #1f2937; }
+        .title { font-size: 20px; font-weight: 700; color: #FF6B00; }
+        .actions { display: flex; gap: 12px; align-items: center; }
+        .btn { background: #FF6B00; color: #0d1117; border: none; padding: 10px 14px; border-radius: 8px; font-weight: 700; cursor: pointer; }
+        .link { color: #e6edf3; text-decoration: none; font-weight: 600; }
+        .container { padding: 30px; display: grid; gap: 24px; }
+        .card { background: #111827; border: 1px solid #1f2937; border-radius: 12px; padding: 20px; }
+        h2 { margin: 0 0 15px 0; font-size: 16px; color: #FF6B00; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th, td { padding: 10px; border-bottom: 1px solid #1f2937; text-align: left; }
+        th { color: #9ca3af; font-weight: 600; }
+        .estado-on { color: #22c55e; font-weight: 700; }
+        .estado-off { color: #ef4444; font-weight: 700; }
+        .toast { position: fixed; top: 20px; right: 20px; background: #16a34a; color: white; padding: 10px 14px; border-radius: 8px; font-size: 12px; display: none; }
+        .toast.error { background: #dc2626; }
+        dialog { border: none; border-radius: 10px; padding: 20px; background: #0f172a; color: #e6edf3; }
+        dialog::backdrop { background: rgba(0,0,0,0.6); }
+        .dialog-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 15px; }
+        input[type="text"] { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #1f2937; background: #0d1117; color: #e6edf3; }
+        .footer { text-align: center; padding: 20px; font-size: 12px; color: #9ca3af; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="title">🛠️ Panel del Desarrollador — ABICOFARM v1.0</div>
+        <div class="actions">
+            <button class="btn" id="btnActualizar">🔄 Actualizar datos</button>
+            <a href="{{ url_for('logout') }}" class="link">← Salir</a>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="card">
+            <h2>🟢 Sesiones Activas</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Nombre</th>
+                        <th>Rol</th>
+                        <th>Sucursal</th>
+                        <th>Último Login</th>
+                        <th>Tiempo en sesión</th>
+                    </tr>
+                </thead>
+                <tbody id="tabla-activos"></tbody>
+            </table>
+        </div>
+
+        <div class="card">
+            <h2>👥 Todos los Usuarios</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Nombre</th>
+                        <th>Username</th>
+                        <th>Password Hash</th>
+                        <th>Rol</th>
+                        <th>Sucursal</th>
+                        <th>Último Login</th>
+                        <th>Estado</th>
+                        <th>Reset Password</th>
+                    </tr>
+                </thead>
+                <tbody id="tabla-usuarios"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="footer">Sistema ABICOFARM © 2026 — Solo acceso autorizado</div>
+    <div id="toast" class="toast"></div>
+
+    <dialog id="resetDialog">
+        <h3>🔑 Resetear contraseña</h3>
+        <p id="resetNombre" style="margin: 8px 0 12px 0;"></p>
+        <label>Nueva contraseña</label>
+        <input type="text" id="resetInput" placeholder="Nueva contraseña">
+        <div class="dialog-actions">
+            <button class="btn" id="btnConfirmar">Guardar</button>
+            <button class="btn" id="btnCancelar" style="background:#374151; color:#e6edf3;">Cancelar</button>
+        </div>
+    </dialog>
+
+    <script>
+        const tablaActivos = document.getElementById('tabla-activos');
+        const tablaUsuarios = document.getElementById('tabla-usuarios');
+        const btnActualizar = document.getElementById('btnActualizar');
+        const toast = document.getElementById('toast');
+        const resetDialog = document.getElementById('resetDialog');
+        const resetNombre = document.getElementById('resetNombre');
+        const resetInput = document.getElementById('resetInput');
+        const btnConfirmar = document.getElementById('btnConfirmar');
+        const btnCancelar = document.getElementById('btnCancelar');
+
+        let usuariosCache = [];
+        let usuarioSeleccionado = null;
+
+        function mostrarToast(texto, esError) {
+            if (!toast) {
+                return;
+            }
+            toast.textContent = texto;
+            toast.classList.toggle('error', !!esError);
+            toast.style.display = 'block';
+            setTimeout(() => {
+                toast.style.display = 'none';
+            }, 3000);
+        }
+
+        function formatearTiempo(ultimoLogin) {
+            if (!ultimoLogin) {
+                return '-';
+            }
+            const parsed = new Date(ultimoLogin.replace(' ', 'T'));
+            if (Number.isNaN(parsed.getTime())) {
+                return '-';
+            }
+            const diffMs = Date.now() - parsed.getTime();
+            const minutos = Math.max(0, Math.floor(diffMs / 60000));
+            const horas = Math.floor(minutos / 60);
+            const minsRest = minutos % 60;
+            if (horas > 0) {
+                return `${horas}h ${minsRest}m`;
+            }
+            return `${minsRest}m`;
+        }
+
+        function renderTablas(usuarios) {
+            const activos = usuarios.filter((u) => u.activo_ahora);
+            tablaActivos.innerHTML = activos.map((u) => `
+                <tr>
+                    <td>${u.nombre}</td>
+                    <td>${u.rol}</td>
+                    <td>${u.sucursal}</td>
+                    <td>${u.ultimo_login || '-'}</td>
+                    <td data-ultimo-login="${u.ultimo_login || ''}">${formatearTiempo(u.ultimo_login)}</td>
+                </tr>
+            `).join('');
+
+            tablaUsuarios.innerHTML = usuarios.map((u) => `
+                <tr>
+                    <td>${u.id}</td>
+                    <td>${u.nombre}</td>
+                    <td>${u.username}</td>
+                    <td>${u.password_hash}</td>
+                    <td>${u.rol}</td>
+                    <td>${u.sucursal}</td>
+                    <td>${u.ultimo_login || '-'}</td>
+                    <td>${u.activo_ahora ? '<span class="estado-on">🟢</span>' : '<span class="estado-off">🔴</span>'}</td>
+                    <td><button class="btn" data-reset-id="${u.id}" data-reset-nombre="${u.nombre}">🔑 Reset</button></td>
+                </tr>
+            `).join('');
+        }
+
+        async function cargarUsuarios() {
+            try {
+                const resp = await fetch('/dev/usuarios/json', { cache: 'no-store' });
+                if (!resp.ok) {
+                    mostrarToast('Error al cargar datos', true);
+                    return;
+                }
+                const data = await resp.json();
+                usuariosCache = data.usuarios || [];
+                renderTablas(usuariosCache);
+            } catch (err) {
+                console.error('Error al cargar usuarios', err);
+                mostrarToast('Error al cargar datos', true);
+            }
+        }
+
+        function actualizarTiempoSesion() {
+            const filas = document.querySelectorAll('[data-ultimo-login]');
+            filas.forEach((cell) => {
+                const valor = cell.getAttribute('data-ultimo-login');
+                cell.textContent = formatearTiempo(valor);
+            });
+        }
+
+        document.addEventListener('click', (event) => {
+            const target = event.target;
+            if (!target) {
+                return;
+            }
+            const resetId = target.getAttribute('data-reset-id');
+            if (resetId) {
+                usuarioSeleccionado = resetId;
+                resetNombre.textContent = `Usuario: ${target.getAttribute('data-reset-nombre')}`;
+                resetInput.value = '';
+                resetDialog.showModal();
+            }
+        });
+
+        btnConfirmar.addEventListener('click', async () => {
+            if (!usuarioSeleccionado) {
+                return;
+            }
+            const nueva = resetInput.value.trim();
+            if (!nueva) {
+                mostrarToast('Debes ingresar una nueva contraseña', true);
+                return;
+            }
+            try {
+                const resp = await fetch(`/dev/reset-password/${usuarioSeleccionado}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ nueva_password: nueva })
+                });
+                const data = await resp.json();
+                if (!resp.ok || data.status !== 'ok') {
+                    mostrarToast(data.mensaje || 'Error al actualizar', true);
+                    return;
+                }
+                mostrarToast(data.mensaje || 'Contraseña actualizada', false);
+                resetDialog.close();
+                await cargarUsuarios();
+            } catch (err) {
+                console.error('Error al resetear contraseña', err);
+                mostrarToast('Error al actualizar', true);
+            }
+        });
+
+        btnCancelar.addEventListener('click', () => {
+            resetDialog.close();
+        });
+
+        btnActualizar.addEventListener('click', () => {
+            cargarUsuarios();
+        });
+
+        cargarUsuarios();
+        setInterval(actualizarTiempoSesion, 60000);
+    </script>
+</body>
+</html>

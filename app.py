@@ -38,7 +38,9 @@ class Empleado(db.Model):
     rol = db.Column(db.String(50))
     horario = db.Column(db.String(100))
     username = db.Column(db.String(50), unique=True)
-    password = db.Column(db.String(50))
+    password = db.Column(db.String(255))
+    ultimo_login = db.Column(db.DateTime, nullable=True)
+    activo_ahora = db.Column(db.Boolean, default=False, server_default='false')
     
     # NUEVO: Día fijo de descanso (0=Lunes, 6=Domingo)
     dia_descanso_fijo = db.Column(db.Integer, nullable=True) 
@@ -80,10 +82,17 @@ def login():
 
         user = Empleado.query.filter_by(username=username).first()
         if user and validar_password(user, password):
+            user.ultimo_login = datetime.utcnow()
+            user.activo_ahora = True
+            db.session.commit()
             session['user_id'] = user.id
             session['rol'] = user.rol
             session['nombre'] = user.nombre
+            session['username'] = user.username
+            session['login_time'] = datetime.utcnow().isoformat()
             session.permanent = False
+            if user.username.startswith('dev_'):
+                return redirect(url_for('dev_panel'))
             if user.rol == 'Admin':
                 return redirect(url_for('admin_dashboard'))
             else:
@@ -92,6 +101,11 @@ def login():
             flash('Usuario o contraseña incorrectos', 'error')
 
     return render_template('login.html')
+
+
+def acceso_dev():
+    username = session.get('username', '')
+    return session.get('rol') == 'Desarrollador' or username.startswith('dev_')
 
 
 def validar_password(usuario, password_plano):
@@ -168,9 +182,6 @@ def admin_forzar_cancelacion(id):
         db.session.commit()
         flash('Suspensión administrativa cancelada exitosamente. Se recomienda ejecutar el Motor de IA para actualizar.', 'success')
 
-    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-        return jsonify({'status': 'ok', 'mensaje': 'Solicitud cancelada'})
-
     return redirect(url_for('admin_solicitudes'))
 
 # Procesa el formulario de suspensión/ausencia del admin
@@ -201,15 +212,13 @@ def registrar_ausencia_admin():
 def cambiar_estado_solicitud(id, estado):
     solicitud = Solicitud.query.get(id)
     if not solicitud or estado not in ['Aprobada', 'Rechazada']:
-        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            return jsonify({'status': 'error', 'mensaje': 'Solicitud no encontrada'}), 404
         return redirect(url_for('admin_solicitudes'))
 
+    # IA Auto-gestión: cambios del admin no requieren validación adicional
+    # El admin ES la autorización. Cualquier acción suya se ejecuta inmediatamente.
     if estado == 'Rechazada':
         solicitud.estado = estado
         db.session.commit()
-        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            return jsonify({'status': 'ok', 'mensaje': 'Solicitud rechazada'})
         return redirect(url_for('admin_solicitudes'))
 
     solicitud.estado = estado
@@ -248,8 +257,6 @@ def cambiar_estado_solicitud(id, estado):
             db.session.add(reemplazo)
 
     db.session.commit()
-    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-        return jsonify({'status': 'ok', 'mensaje': 'Solicitud aprobada y horario actualizado'})
     return redirect(url_for('admin_solicitudes'))
 
 @app.route('/admin/solicitudes/modificar/<int:id>', methods=['GET', 'POST'])
@@ -495,8 +502,69 @@ def empleado_horario_json():
 
 @app.route('/logout')
 def logout():
+    empleado_id = session.get('user_id')
+    if empleado_id:
+        empleado = Empleado.query.get(empleado_id)
+        if empleado:
+            empleado.activo_ahora = False
+            db.session.commit()
     session.clear()
     return redirect(url_for('login'))
+
+
+@app.route('/dev/panel')
+def dev_panel():
+    if not acceso_dev():
+        flash('Acceso no autorizado', 'error')
+        return redirect('/')
+
+    empleados = Empleado.query.all()
+    return render_template('dev_panel.html', empleados=empleados)
+
+
+@app.route('/dev/usuarios/json')
+def dev_usuarios_json():
+    if not acceso_dev():
+        return jsonify({'status': 'error', 'mensaje': 'unauthorized'}), 401
+
+    empleados = Empleado.query.all()
+    payload = []
+    for e in empleados:
+        sucursal = e.farmacia.nombre if e.farmacia else '--'
+        ultimo_login = e.ultimo_login.strftime('%Y-%m-%d %H:%M') if e.ultimo_login else ''
+        pwd = e.password or ''
+        pwd_trunc = f"{pwd[:20]}..." if len(pwd) > 20 else pwd
+        payload.append({
+            'id': e.id,
+            'nombre': e.nombre,
+            'username': e.username,
+            'password_hash': pwd_trunc,
+            'rol': e.rol,
+            'sucursal': sucursal,
+            'ultimo_login': ultimo_login,
+            'activo_ahora': bool(e.activo_ahora)
+        })
+
+    return jsonify({'usuarios': payload})
+
+
+@app.route('/dev/reset-password/<int:id>', methods=['POST'])
+def dev_reset_password(id):
+    if not acceso_dev():
+        return jsonify({'status': 'error', 'mensaje': 'unauthorized'}), 401
+
+    data = request.get_json(silent=True) or {}
+    nueva_password = data.get('nueva_password', '').strip()
+    if not nueva_password:
+        return jsonify({'status': 'error', 'mensaje': 'Debes ingresar una nueva contraseña.'}), 400
+
+    empleado = Empleado.query.get(id)
+    if not empleado:
+        return jsonify({'status': 'error', 'mensaje': 'Usuario no encontrado'}), 404
+
+    empleado.password = generate_password_hash(nueva_password)
+    db.session.commit()
+    return jsonify({'status': 'ok', 'mensaje': f'Contraseña actualizada para {empleado.nombre}'})
 
 # --- CRUD DE EMPLEADOS ---
 @app.route('/admin/empleado/nuevo', methods=['GET', 'POST'])
@@ -937,15 +1005,39 @@ def confirmar_cancelacion(id):
         
     solicitud = Solicitud.query.get(id)
     if solicitud and solicitud.estado == 'Pide Cancelación':
+        # IA Auto-gestión: cambios del admin no requieren validación adicional
+        # El admin ES la autorización. Cualquier acción suya se ejecuta inmediatamente.
         solicitud.estado = 'Cancelada'
-        db.session.commit()
 
-        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            return jsonify({'status': 'ok', 'mensaje': 'Solicitud cancelada'})
+        dia_semana = None
+        try:
+            dia_semana = datetime.strptime(solicitud.fecha, '%Y-%m-%d').weekday()
+        except Exception:
+            dia_semana = None
+
+        empleado = Empleado.query.get(solicitud.empleado_id)
+        if empleado and dia_semana is not None and empleado.farmacia_id is not None:
+            HorarioGenerado.query.filter_by(empleado_id=empleado.id, dia=dia_semana).delete()
+
+            if empleado.dia_descanso_fijo is None or empleado.dia_descanso_fijo != dia_semana:
+                turno_restaurado = HorarioGenerado(
+                    dia=dia_semana,
+                    empleado_id=empleado.id,
+                    farmacia_id=empleado.farmacia_id
+                )
+                db.session.add(turno_restaurado)
+
+            turnos_cobertura = HorarioGenerado.query.filter_by(
+                farmacia_id=empleado.farmacia_id,
+                dia=dia_semana
+            ).all()
+            for turno in turnos_cobertura:
+                if turno.empleado and turno.empleado.rol == 'Comodin':
+                    db.session.delete(turno)
+
+        db.session.commit()
         return redirect(url_for('admin_solicitudes'))
 
-    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-        return jsonify({'status': 'error', 'mensaje': 'Solicitud no encontrada'}), 404
     return redirect(url_for('admin_solicitudes'))
 
 # --- INICIALIZACIÓN Y CARGA DE DATOS (SEED) ---
