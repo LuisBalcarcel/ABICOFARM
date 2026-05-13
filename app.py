@@ -1,19 +1,27 @@
-from flask import Flask, render_template, request, redirect, url_for, session, flash
+from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
 from flask_sqlalchemy import SQLAlchemy
 import os
 from optimizer import generar_horario_semana 
 from datetime import datetime, timedelta
 
 app = Flask(__name__)
-app.secret_key = 'clave_secreta_tesis_umg'
+app.secret_key = os.environ.get('SECRET_KEY', 'dev_secret_key')
 
-DATABASE_URL = os.environ.get('DATABASE_URL', 'postgresql://postgres:[TU-PASSWORD]@db.fkppgkdoivyrzfeerxpn.supabase.co:5432/postgres')
+DATABASE_URL = os.environ.get('DATABASE_URL')
+if not DATABASE_URL:
+    DATABASE_URL = 'sqlite:///instance/abicofarm.db'
 
 # Render a veces entrega la URL con 'postgres://', SQLAlchemy necesita 'postgresql://'
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
+# Supabase requiere SSL; agrega sslmode si no viene en la URL
+if "supabase.co" in DATABASE_URL and "sslmode=" not in DATABASE_URL:
+    sep = "&" if "?" in DATABASE_URL else "?"
+    DATABASE_URL = f"{DATABASE_URL}{sep}sslmode=require"
+
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
@@ -172,17 +180,28 @@ def modificar_solicitud(id):
 def empleado_dashboard():
     if 'user_id' not in session or session.get('rol') == 'Admin':
         return redirect(url_for('login'))
-        
+
     empleado_id = session['user_id']
+    data = construir_estado_empleado(empleado_id)
     usuario_actual = Empleado.query.get(empleado_id)
-    
+
+    return render_template('empleado.html',
+                           nombre=session.get('nombre'),
+                           user=usuario_actual,
+                           mi_horario=data['mi_horario'],
+                           solicitudes=data['solicitudes'],
+                           fechas_semana=data['fechas_semana'])
+
+
+def construir_estado_empleado(empleado_id):
+    usuario_actual = Empleado.query.get(empleado_id)
     turnos = HorarioGenerado.query.filter_by(empleado_id=empleado_id).all()
-    
+
     permisos_aprobados = Solicitud.query.filter(
         Solicitud.empleado_id == empleado_id,
         Solicitud.estado.in_(['Aprobada', 'Modificada (Aprobada)'])
     ).all()
-    
+
     mi_horario = {}
     for t in turnos:
         mi_horario[t.dia] = t.farmacia.nombre
@@ -192,7 +211,7 @@ def empleado_dashboard():
         try:
             dt = datetime.strptime(perm.fecha, '%Y-%m-%d')
             dia_semana = dt.weekday()
-            
+
             # Solo sobrescribimos si no le tocó turno en otra farmacia ese mismo día
             if dia_semana not in mi_horario or mi_horario[dia_semana] == 'Descanso':
                 if perm.mensaje_admin == 'Registro Administrativo Directo':
@@ -203,22 +222,47 @@ def empleado_dashboard():
             print("Error al procesar permiso en vista empleado:", e)
 
     mis_solicitudes = Solicitud.query.filter_by(empleado_id=empleado_id).order_by(Solicitud.id.desc()).all()
-    
+
     # Calcular las fechas de la semana actual (Lunes a Domingo)
     hoy = datetime.now()
     inicio_semana = hoy - timedelta(days=hoy.weekday())
-    
+
     fechas_semana = []
     for i in range(7):
         fecha_dia = inicio_semana + timedelta(days=i)
         fechas_semana.append(fecha_dia.strftime('%d/%m/%Y'))
-    
-    return render_template('empleado.html', 
-                           nombre=session.get('nombre'),
-                           user=usuario_actual,
-                           mi_horario=mi_horario, 
-                           solicitudes=mis_solicitudes,
-                           fechas_semana=fechas_semana)
+
+    return {
+        'user': usuario_actual,
+        'mi_horario': mi_horario,
+        'solicitudes': mis_solicitudes,
+        'fechas_semana': fechas_semana
+    }
+
+
+@app.route('/empleado/estado')
+def empleado_estado():
+    if 'user_id' not in session or session.get('rol') == 'Admin':
+        return jsonify({'error': 'unauthorized'}), 401
+
+    empleado_id = session['user_id']
+    data = construir_estado_empleado(empleado_id)
+
+    solicitudes_payload = []
+    for s in data['solicitudes']:
+        solicitudes_payload.append({
+            'id': s.id,
+            'fecha': s.fecha,
+            'motivo': s.motivo,
+            'estado': s.estado,
+            'mensaje_admin': s.mensaje_admin or ''
+        })
+
+    return jsonify({
+        'mi_horario': {str(k): v for k, v in data['mi_horario'].items()},
+        'solicitudes': solicitudes_payload,
+        'fechas_semana': data['fechas_semana']
+    })
 
 @app.route('/logout')
 def logout():
