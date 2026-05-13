@@ -87,12 +87,12 @@
                         <td>
                             <div class="action-container">
                                 {% if s.estado == 'Pendiente' %}
-                                    <a href="{{ url_for('cambiar_estado_solicitud', id=s.id, estado='Aprobada') }}" class="btn-action btn-approve">Aprobar</a>
-                                    <a href="{{ url_for('cambiar_estado_solicitud', id=s.id, estado='Rechazada') }}" class="btn-action btn-reject">Rechazar</a>
+                                    <button type="button" class="btn-action btn-approve" data-action="aprobar" data-id="{{ s.id }}">Aprobar</button>
+                                    <button type="button" class="btn-action btn-reject" data-action="rechazar" data-id="{{ s.id }}">Rechazar</button>
                                     <a href="{{ url_for('modificar_solicitud', id=s.id) }}" class="btn-action-small btn-edit">Modificar</a>
                                 
                                 {% elif s.estado == 'Pide Cancelación' %}
-                                    <a href="{{ url_for('confirmar_cancelacion', id=s.id) }}" class="btn-action" style="background:#e1bee7; color:#4a148c; border:2px solid #ce93d8;">[ ? ] Aceptar Cancelación</a>
+                                    <button type="button" class="btn-action" data-action="confirmar-cancelacion" data-id="{{ s.id }}" style="background:#e1bee7; color:#4a148c; border:2px solid #ce93d8;">[ ? ] Aceptar Cancelación</button>
                                 
                                 {% else %}
                                     <span style="color:#b0bec5; font-style:italic;">Procesada</span>
@@ -102,9 +102,7 @@
                                         <div style="margin-left: 10px; display: flex; gap: 8px;">
                                             <a href="{{ url_for('modificar_solicitud', id=s.id) }}" class="btn-action-small btn-edit">Editar</a>
                                             
-                                            <form action="{{ url_for('admin_forzar_cancelacion', id=s.id) }}" method="POST" style="margin: 0;">
-                                                <button type="submit" class="btn-action-small btn-delete" onclick="return confirm('¿Seguro que deseas CANCELAR esta suspensión administrativa?');">Eliminar</button>
-                                            </form>
+                                            <button type="button" class="btn-action-small btn-delete" data-action="forzar-cancelacion" data-id="{{ s.id }}">Eliminar</button>
                                         </div>
                                     {% endif %}
                                     
@@ -179,13 +177,13 @@
 
                 if (s.estado === 'Pendiente') {
                     acciones = `
-                        <a href="/admin/solicitudes/estado/${s.id}/Aprobada" class="btn-action btn-approve">Aprobar</a>
-                        <a href="/admin/solicitudes/estado/${s.id}/Rechazada" class="btn-action btn-reject">Rechazar</a>
+                        <button type="button" class="btn-action btn-approve" data-action="aprobar" data-id="${s.id}">Aprobar</button>
+                        <button type="button" class="btn-action btn-reject" data-action="rechazar" data-id="${s.id}">Rechazar</button>
                         <a href="/admin/solicitudes/modificar/${s.id}" class="btn-action-small btn-edit">Modificar</a>
                     `;
                 } else if (s.estado === 'Pide Cancelación') {
                     acciones = `
-                        <a href="/admin/solicitudes/confirmar_cancelacion/${s.id}" class="btn-action" style="background:#e1bee7; color:#4a148c; border:2px solid #ce93d8;">[ ? ] Aceptar Cancelación</a>
+                        <button type="button" class="btn-action" data-action="confirmar-cancelacion" data-id="${s.id}" style="background:#e1bee7; color:#4a148c; border:2px solid #ce93d8;">[ ? ] Aceptar Cancelación</button>
                     `;
                 } else {
                     acciones = '<span style="color:#b0bec5; font-style:italic;">Procesada</span>';
@@ -193,9 +191,7 @@
                         acciones += `
                             <div style="margin-left: 10px; display: flex; gap: 8px;">
                                 <a href="/admin/solicitudes/modificar/${s.id}" class="btn-action-small btn-edit">Editar</a>
-                                <form action="/admin/solicitudes/forzar_cancelacion/${s.id}" method="POST" style="margin: 0;">
-                                    <button type="submit" class="btn-action-small btn-delete" onclick="return confirm('¿Seguro que deseas CANCELAR esta suspensión administrativa?');">Eliminar</button>
-                                </form>
+                                <button type="button" class="btn-action-small btn-delete" data-action="forzar-cancelacion" data-id="${s.id}">Eliminar</button>
                             </div>
                         `;
                     }
@@ -229,6 +225,61 @@
                 console.error('Error al actualizar solicitudes admin', err);
             }
         }
+
+        async function ejecutarAccionSolicitud(action, id) {
+            if (!action || !id) {
+                return;
+            }
+
+            if (action === 'forzar-cancelacion') {
+                const confirmado = confirm('¿Seguro que deseas CANCELAR esta suspensión administrativa?');
+                if (!confirmado) {
+                    return;
+                }
+            }
+
+            let url = '';
+            let opciones = { method: 'GET' };
+
+            if (action === 'aprobar') {
+                url = `/admin/solicitudes/estado/${id}/Aprobada`;
+            } else if (action === 'rechazar') {
+                url = `/admin/solicitudes/estado/${id}/Rechazada`;
+            } else if (action === 'confirmar-cancelacion') {
+                url = `/admin/solicitudes/confirmar_cancelacion/${id}`;
+            } else if (action === 'forzar-cancelacion') {
+                url = `/admin/solicitudes/forzar_cancelacion/${id}`;
+                opciones = { method: 'POST' };
+            }
+
+            if (!url) {
+                return;
+            }
+
+            try {
+                const resp = await fetch(url, opciones);
+                if (!resp.ok) {
+                    return;
+                }
+                await refrescarSolicitudesAdmin();
+            } catch (err) {
+                console.error('Error al ejecutar accion de solicitud', err);
+            }
+        }
+
+        document.addEventListener('click', (event) => {
+            const target = event.target;
+            if (!target) {
+                return;
+            }
+            const action = target.getAttribute('data-action');
+            const id = target.getAttribute('data-id');
+            if (!action || !id) {
+                return;
+            }
+            event.preventDefault();
+            ejecutarAccionSolicitud(action, id);
+        });
 
         setInterval(refrescarSolicitudesAdmin, 15000);
     </script>
