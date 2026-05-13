@@ -22,8 +22,11 @@ def generar_horario_semana(empleados, farmacias, dias=7, ausencias=None, forzada
             model.Add(sum(shifts[(e['id'], f['id'], d)] for f in farmacias) <= 1)
 
     # R2: Máximo 6 días por semana por empleado
+    # Cumplimiento Art. 126 Código de Trabajo Guatemala - Descanso semanal obligatorio
     for e in empleados:
-        model.Add(sum(shifts[(e['id'], f['id'], d)] for f in farmacias for d in range(dias)) <= 6)
+        total_dias = sum(shifts[(e['id'], f['id'], d)] for f in farmacias for d in range(dias))
+        model.Add(total_dias <= 6)
+        model.Add(total_dias >= 1)
 
     # R3: Permisos Aprobados (El empleado que pidió permiso NO trabaja ese día)
     for aus in ausencias:
@@ -108,6 +111,7 @@ def generar_horario_semana(empleados, farmacias, dias=7, ausencias=None, forzada
             model.Add(sum(shifts[(c['id'], f_id, d)] for c in comodines) <= 1)
 
     # R8: Descanso fijo programado (Ej. Universidad o Religión)
+    # Cumplimiento Art. 126 Código de Trabajo Guatemala - Descanso semanal obligatorio
     for e in empleados:
         if e.get('dia_descanso_fijo') is not None:
             d_fijo = e['dia_descanso_fijo']

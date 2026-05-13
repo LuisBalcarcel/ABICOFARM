@@ -212,6 +212,8 @@ def cambiar_estado_solicitud(id, estado):
         comodines = Empleado.query.filter_by(rol='Comodin').all()
         comodin_disponible = None
         for comodin in comodines:
+            if comodin.dia_descanso_fijo is not None and comodin.dia_descanso_fijo == dia_semana:
+                continue
             ocupado = HorarioGenerado.query.filter_by(empleado_id=comodin.id, dia=dia_semana).first()
             if not ocupado:
                 comodin_disponible = comodin
@@ -579,13 +581,48 @@ def ejecutar_ia():
         empleados_db = Empleado.query.filter(Empleado.rol != 'Admin').all()
         farmacias_db = Farmacia.query.all()
 
-        emp_list = [{'id': e.id, 'rol': e.rol, 'farmacia_id': e.farmacia_id, 'dia_descanso_fijo': e.dia_descanso_fijo} for e in empleados_db]
         farm_list = [{'id': f.id, 'nombre': f.nombre} for f in farmacias_db]
 
         # AUSENCIAS APROBADAS
         aprobadas = Solicitud.query.filter(
             Solicitud.estado.in_(['Aprobada', 'Modificada (Aprobada)'])
         ).all()
+
+        permisos_por_empleado = {}
+        for s in aprobadas:
+            try:
+                dt = datetime.strptime(s.fecha, '%Y-%m-%d')
+                permisos_por_empleado.setdefault(s.empleado_id, set()).add(dt.weekday())
+            except Exception:
+                continue
+
+        # Respeta descanso rotativo previo si ya existe horario generado
+        # Cumplimiento Art. 126 Código de Trabajo Guatemala - Descanso semanal obligatorio
+        descanso_rotativo = {}
+        for e in empleados_db:
+            if e.dia_descanso_fijo is not None:
+                continue
+            turnos_actuales = HorarioGenerado.query.filter_by(empleado_id=e.id).all()
+            if not turnos_actuales:
+                continue
+            dias_trabajados = {t.dia for t in turnos_actuales}
+            dias_permiso = permisos_por_empleado.get(e.id, set())
+            for d in range(7):
+                if d not in dias_trabajados and d not in dias_permiso:
+                    descanso_rotativo[e.id] = d
+                    break
+
+        emp_list = []
+        for e in empleados_db:
+            dia_descanso = e.dia_descanso_fijo
+            if dia_descanso is None and e.id in descanso_rotativo:
+                dia_descanso = descanso_rotativo[e.id]
+            emp_list.append({
+                'id': e.id,
+                'rol': e.rol,
+                'farmacia_id': e.farmacia_id,
+                'dia_descanso_fijo': dia_descanso
+            })
 
         ausencias_lista = []
         for s in aprobadas:
