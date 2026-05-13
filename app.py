@@ -362,7 +362,12 @@ def cambiar_credenciales_empleado():
         usuario_actual.password = generate_password_hash(password_nueva)
 
     db.session.commit()
-    return jsonify({'status': 'ok'})
+    session.clear()
+    return jsonify({
+        'status': 'ok',
+        'redirect': '/login?msg=updated',
+        'mensaje': 'Credenciales actualizadas. Por seguridad, inicia sesión nuevamente.'
+    })
 
 
 def construir_estado_empleado(empleado_id):
@@ -573,14 +578,14 @@ def nuevo_empleado():
         return redirect(url_for('login'))
     
     if request.method == 'POST':
-        fid = request.form['farmacia_id']
+        fid = request.form.get('farmacia_id', '')
         
         # Procesar el horario a partir de los inputs de hora
         if 'es_comodin' in request.form:
             horario_final = "SE AJUSTA A LA NECESIDAD"
         else:
-            inicio = request.form['hora_inicio']
-            fin = request.form['hora_fin']
+            inicio = request.form.get('hora_inicio', '')
+            fin = request.form.get('hora_fin', '')
             horario_final = f"{inicio} - {fin}" if inicio and fin else "N/A"
 
         # Capturar el día fijo
@@ -610,8 +615,8 @@ def editar_empleado(id):
         
     empleado = Empleado.query.get(id)
     if request.method == 'POST':
-        empleado.nombre = request.form['nombre']
-        empleado.rol = request.form['rol']
+        empleado.nombre = request.form.get('nombre', empleado.nombre)
+        empleado.rol = request.form.get('rol', empleado.rol)
         
         # Procesar el horario a partir de los inputs de hora
         if 'es_comodin' in request.form:
@@ -626,9 +631,9 @@ def editar_empleado(id):
         dia_fijo = request.form.get('dia_descanso_fijo')
         empleado.dia_descanso_fijo = int(dia_fijo) if dia_fijo else None
 
-        fid = request.form['farmacia_id']
+        fid = request.form.get('farmacia_id', '')
         empleado.farmacia_id = None if fid == "" else int(fid)
-        empleado.username = request.form['username']
+        empleado.username = request.form.get('username', empleado.username)
         
         if request.form['password']: # Solo actualiza clave si no está en blanco
             empleado.password = request.form['password']

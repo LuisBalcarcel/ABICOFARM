@@ -25,11 +25,15 @@
         <div class="logo-sub">FARMACÉUTICO</div>
         <div class="form-title">Login / Acceso al Sistema</div>
 
-        {% with messages = get_flashed_messages() %}
-          {% if messages %}
-            <div class="error">{{ messages[0] }}</div>
-          {% endif %}
-        {% endwith %}
+                <div id="login-msg" style="display:none; background:#e8f5e9; color:#2e7d32; font-size:13px; font-weight:600; padding:10px; border-radius:6px; margin-bottom:15px;">
+                        🔐 Credenciales actualizadas correctamente. Ingresa con tu nueva contraseña.
+                </div>
+
+                {% with messages = get_flashed_messages() %}
+                    {% if messages %}
+                        <div class="error">{{ messages[0] }}</div>
+                    {% endif %}
+                {% endwith %}
 
         <form method="POST" action="/">
             <div class="input-group">
@@ -45,5 +49,17 @@
 
         
     </div>
+
+    <script>
+        const params = new URLSearchParams(window.location.search);
+        const msg = params.get('msg');
+        const banner = document.getElementById('login-msg');
+        if (msg === 'updated' && banner) {
+            banner.style.display = 'block';
+            setTimeout(() => {
+                banner.style.display = 'none';
+            }, 5000);
+        }
+    </script>
 </body>
 </html>

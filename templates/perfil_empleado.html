@@ -86,6 +86,18 @@
             }, 4000);
         }
 
+        function iniciarCuentaRegresiva(url) {
+            let segundos = 3;
+            const intervalo = setInterval(() => {
+                mostrarToast(`✅ Cambios guardados. Cerrando sesión en ${segundos} segundos...`, 'exito');
+                segundos -= 1;
+                if (segundos < 0) {
+                    clearInterval(intervalo);
+                    window.location.href = url;
+                }
+            }, 1000);
+        }
+
         if (form) {
             form.addEventListener('submit', async (event) => {
                 event.preventDefault();
@@ -110,6 +122,11 @@
 
                     if (!resp.ok || data.status !== 'ok') {
                         mostrarToast(`❌ ${data.mensaje || 'Error al actualizar'}`, 'error');
+                        return;
+                    }
+
+                    if (data.redirect) {
+                        iniciarCuentaRegresiva(data.redirect);
                         return;
                     }
 
