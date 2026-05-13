@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Portal Empleado - Horario</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap');
+        body { font-family: 'Montserrat', sans-serif; background-color: #f4f7f6; margin: 0; display: flex; min-height: 100vh; color: #003366; }
+        .sidebar { width: 240px; background-color: #003366; color: white; padding: 20px; box-sizing: border-box; }
+        .brand { color: #ff6b00; font-size: 20px; font-weight: 700; line-height: 1.1; margin-bottom: 40px; }
+        .brand span { color: white; font-size: 12px; }
+        .menu-item { padding: 15px 10px; margin-bottom: 5px; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; color: #a0aec0; text-decoration: none; display: block; }
+        .menu-item.active { background-color: #ff6b00; color: white; }
+        .main-content { flex: 1; padding: 40px; }
+        .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        td, th { padding: 10px; border-bottom: 1px solid #eee; font-size: 13px; text-align: center; }
+        .horario-table th { color: #0288d1; font-size: 14px; }
+        .logout { color: #ff6b00; font-weight: bold; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <div class="brand">Bienestar<br>Comunitario<br><span>FARMACÉUTICO</span></div>
+        <a href="{{ url_for('empleado_horario') }}" class="menu-item active">Mi Horario</a>
+        <a href="{{ url_for('empleado_permisos') }}" class="menu-item">Permisos</a>
+        <div style="margin-top: 50px;">
+            <p style="font-size:12px; color:#a0aec0;">Usuario: {{ user.nombre }}</p>
+            <a href="{{ url_for('logout') }}" class="logout">Cerrar Sesion</a>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <div class="card">
+            <h3 style="margin-top:0; color:#00bcd4;">Tu Horario Oficial semanal</h3>
+            <table class="horario-table">
+                <thead>
+                    <tr>
+                        <th width="30%">Día</th>
+                        <th width="35%">Sucursal</th>
+                        <th width="35%">Horario</th>
+                    </tr>
+                </thead>
+                <tbody id="horario-body">
+                    {% set dias_semana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'] %}
+                    {% for i in range(7) %}
+                        {% set turno = mi_horario.get(i) %}
+                        {% if turno %}
+                            {% if turno == 'Permiso Aprobado' %}
+                            <tr>
+                                <td>
+                                    <b>{{ dias_semana[i] }}</b><br>
+                                    <span style="font-size:11px; color:#999;">{{ fechas_semana[i] }}</span>
+                                </td>
+                                <td style="color: #b0bec5; font-weight: bold; font-style: italic;">Permiso Aprobado</td>
+                                <td style="color: #b0bec5; font-style: italic;">-</td>
+                            </tr>
+                            {% elif turno == 'Suspensión' %}
+                            <tr style="background-color: #ffebee;">
+                                <td>
+                                    <b style="color: #c62828;">{{ dias_semana[i] }}</b><br>
+                                    <span style="font-size:11px; color:#c62828; opacity: 0.8;">{{ fechas_semana[i] }}</span>
+                                </td>
+                                <td style="color: #c62828; font-weight: bold;">Suspensión</td>
+                                <td style="color: #c62828; font-style: italic;">-</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td>
+                                    <b>{{ dias_semana[i] }}</b><br>
+                                    <span style="font-size:11px; color:#999;">{{ fechas_semana[i] }}</span>
+                                </td>
+                                <td style="color:#ff6b00; font-weight:bold;">{{ turno }}</td>
+                                <td>8 AM - 6:00 PM</td>
+                            </tr>
+                            {% endif %}
+                        {% else %}
+                            <tr>
+                                <td>
+                                    <b>{{ dias_semana[i] }}</b><br>
+                                    <span style="font-size:11px; color:#999;">{{ fechas_semana[i] }}</span>
+                                </td>
+                                <td style="font-style: italic;">-</td>
+                                <td style="font-style: italic;">Descanso</td>
+                            </tr>
+                        {% endif %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const diasSemana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+
+        function renderHorario(data) {
+            const body = document.getElementById('horario-body');
+            if (!body) {
+                return;
+            }
+
+            const miHorario = data.mi_horario || {};
+            const fechas = data.fechas_semana || [];
+            let html = '';
+
+            for (let i = 0; i < 7; i++) {
+                const turno = miHorario[String(i)];
+                const fechaTexto = fechas[i] || '';
+
+                if (turno) {
+                    if (turno === 'Permiso Aprobado') {
+                        html += `
+                            <tr>
+                                <td>
+                                    <b>${diasSemana[i]}</b><br>
+                                    <span style="font-size:11px; color:#999;">${fechaTexto}</span>
+                                </td>
+                                <td style="color: #b0bec5; font-weight: bold; font-style: italic;">Permiso Aprobado</td>
+                                <td style="color: #b0bec5; font-style: italic;">-</td>
+                            </tr>
+                        `;
+                    } else if (turno === 'Suspensión') {
+                        html += `
+                            <tr style="background-color: #ffebee;">
+                                <td>
+                                    <b style="color: #c62828;">${diasSemana[i]}</b><br>
+                                    <span style="font-size:11px; color:#c62828; opacity: 0.8;">${fechaTexto}</span>
+                                </td>
+                                <td style="color: #c62828; font-weight: bold;">Suspensión</td>
+                                <td style="color: #c62828; font-style: italic;">-</td>
+                            </tr>
+                        `;
+                    } else {
+                        html += `
+                            <tr>
+                                <td>
+                                    <b>${diasSemana[i]}</b><br>
+                                    <span style="font-size:11px; color:#999;">${fechaTexto}</span>
+                                </td>
+                                <td style="color:#ff6b00; font-weight:bold;">${turno}</td>
+                                <td>8 AM - 6:00 PM</td>
+                            </tr>
+                        `;
+                    }
+                } else {
+                    html += `
+                        <tr>
+                            <td>
+                                <b>${diasSemana[i]}</b><br>
+                                <span style="font-size:11px; color:#999;">${fechaTexto}</span>
+                            </td>
+                            <td style="font-style: italic;">-</td>
+                            <td style="font-style: italic;">Descanso</td>
+                        </tr>
+                    `;
+                }
+            }
+
+            body.innerHTML = html;
+        }
+
+        async function refrescarEstadoEmpleado() {
+            try {
+                const resp = await fetch('/empleado/estado', { cache: 'no-store' });
+                if (!resp.ok) {
+                    return;
+                }
+                const data = await resp.json();
+                renderHorario(data);
+            } catch (err) {
+                console.error('Error al actualizar horario del empleado', err);
+            }
+        }
+
+        setInterval(refrescarEstadoEmpleado, 15000);
+    </script>
+</body>
+</html>

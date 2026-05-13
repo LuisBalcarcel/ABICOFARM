@@ -82,6 +82,7 @@ def login():
             session['user_id'] = user.id
             session['rol'] = user.rol
             session['nombre'] = user.nombre
+            session.permanent = False
             if user.rol == 'Admin':
                 return redirect(url_for('admin_dashboard'))
             else:
@@ -114,6 +115,26 @@ def admin_solicitudes():
                            solicitudes=solicitudes, 
                            empleados=empleados,
                            nombre=session.get('nombre'))
+
+
+@app.route('/admin/solicitudes/estado')
+def admin_solicitudes_estado():
+    if 'user_id' not in session or session.get('rol') != 'Admin':
+        return jsonify({'error': 'unauthorized'}), 401
+
+    solicitudes = Solicitud.query.order_by(Solicitud.id.desc()).all()
+    payload = []
+    for s in solicitudes:
+        payload.append({
+            'id': s.id,
+            'empleado': s.empleado.nombre if s.empleado else '-',
+            'fecha': s.fecha,
+            'motivo': s.motivo,
+            'estado': s.estado,
+            'mensaje_admin': s.mensaje_admin or ''
+        })
+
+    return jsonify({'solicitudes': payload})
 
 # Ruta para que el Admin pueda cancelar directamente una suspensión
 @app.route('/admin/solicitudes/forzar_cancelacion/<int:id>', methods=['POST'])
@@ -181,16 +202,38 @@ def empleado_dashboard():
     if 'user_id' not in session or session.get('rol') == 'Admin':
         return redirect(url_for('login'))
 
+    return redirect(url_for('empleado_horario'))
+
+
+@app.route('/empleado/horario')
+def empleado_horario():
+    if 'user_id' not in session or session.get('rol') == 'Admin':
+        return redirect(url_for('login'))
+
     empleado_id = session['user_id']
     data = construir_estado_empleado(empleado_id)
     usuario_actual = Empleado.query.get(empleado_id)
 
-    return render_template('empleado.html',
+    return render_template('empleado_horario.html',
                            nombre=session.get('nombre'),
                            user=usuario_actual,
                            mi_horario=data['mi_horario'],
-                           solicitudes=data['solicitudes'],
                            fechas_semana=data['fechas_semana'])
+
+
+@app.route('/empleado/permisos')
+def empleado_permisos():
+    if 'user_id' not in session or session.get('rol') == 'Admin':
+        return redirect(url_for('login'))
+
+    empleado_id = session['user_id']
+    data = construir_estado_empleado(empleado_id)
+    usuario_actual = Empleado.query.get(empleado_id)
+
+    return render_template('empleado_permisos.html',
+                           nombre=session.get('nombre'),
+                           user=usuario_actual,
+                           solicitudes=data['solicitudes'])
 
 
 def construir_estado_empleado(empleado_id):

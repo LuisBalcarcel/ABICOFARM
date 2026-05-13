@@ -68,48 +68,52 @@
         
         <div class="card">
             <table>
-                <tr>
-                    <th>EMPLEADO</th>
-                    <th>FECHA SOLICITADA</th>
-                    <th>MOTIVO</th>
-                    <th>ESTADO</th>
-                    <th>ACCIÓN</th>
-                </tr>
-                {% for s in solicitudes %}
-                <tr>
-                    <td>{{ s.empleado.nombre }}</td>
-                    <td><b>{{ s.fecha }}</b></td>
-                    <td>{{ s.motivo }}<br><i style="font-size:11px; color:#666;">{{ s.mensaje_admin }}</i></td>
-                    <td><b>{{ s.estado }}</b></td>
-                    <td>
-                        <div class="action-container">
-                            {% if s.estado == 'Pendiente' %}
-                                <a href="{{ url_for('cambiar_estado_solicitud', id=s.id, estado='Aprobada') }}" class="btn-action btn-approve">Aprobar</a>
-                                <a href="{{ url_for('cambiar_estado_solicitud', id=s.id, estado='Rechazada') }}" class="btn-action btn-reject">Rechazar</a>
-                                <a href="{{ url_for('modificar_solicitud', id=s.id) }}" class="btn-action-small btn-edit">Modificar</a>
-                            
-                            {% elif s.estado == 'Pide Cancelación' %}
-                                <a href="{{ url_for('confirmar_cancelacion', id=s.id) }}" class="btn-action" style="background:#e1bee7; color:#4a148c; border:2px solid #ce93d8;">[ ? ] Aceptar Cancelación</a>
-                            
-                            {% else %}
-                                <span style="color:#b0bec5; font-style:italic;">Procesada</span>
+                <thead>
+                    <tr>
+                        <th>EMPLEADO</th>
+                        <th>FECHA SOLICITADA</th>
+                        <th>MOTIVO</th>
+                        <th>ESTADO</th>
+                        <th>ACCIÓN</th>
+                    </tr>
+                </thead>
+                <tbody id="solicitudes-body">
+                    {% for s in solicitudes %}
+                    <tr>
+                        <td>{{ s.empleado.nombre }}</td>
+                        <td><b>{{ s.fecha }}</b></td>
+                        <td>{{ s.motivo }}<br><i style="font-size:11px; color:#666;">{{ s.mensaje_admin }}</i></td>
+                        <td><b>{{ s.estado }}</b></td>
+                        <td>
+                            <div class="action-container">
+                                {% if s.estado == 'Pendiente' %}
+                                    <a href="{{ url_for('cambiar_estado_solicitud', id=s.id, estado='Aprobada') }}" class="btn-action btn-approve">Aprobar</a>
+                                    <a href="{{ url_for('cambiar_estado_solicitud', id=s.id, estado='Rechazada') }}" class="btn-action btn-reject">Rechazar</a>
+                                    <a href="{{ url_for('modificar_solicitud', id=s.id) }}" class="btn-action-small btn-edit">Modificar</a>
                                 
-                                <!-- NUEVO: Permitir al Admin cancelar y modificar SUS PROPIOS registros directos -->
-                                {% if s.mensaje_admin == 'Registro Administrativo Directo' and s.estado != 'Cancelada' %}
-                                    <div style="margin-left: 10px; display: flex; gap: 8px;">
-                                        <a href="{{ url_for('modificar_solicitud', id=s.id) }}" class="btn-action-small btn-edit">Editar</a>
-                                        
-                                        <form action="{{ url_for('admin_forzar_cancelacion', id=s.id) }}" method="POST" style="margin: 0;">
-                                            <button type="submit" class="btn-action-small btn-delete" onclick="return confirm('¿Seguro que deseas CANCELAR esta suspensión administrativa?');">Eliminar</button>
-                                        </form>
-                                    </div>
+                                {% elif s.estado == 'Pide Cancelación' %}
+                                    <a href="{{ url_for('confirmar_cancelacion', id=s.id) }}" class="btn-action" style="background:#e1bee7; color:#4a148c; border:2px solid #ce93d8;">[ ? ] Aceptar Cancelación</a>
+                                
+                                {% else %}
+                                    <span style="color:#b0bec5; font-style:italic;">Procesada</span>
+                                    
+                                    <!-- NUEVO: Permitir al Admin cancelar y modificar SUS PROPIOS registros directos -->
+                                    {% if s.mensaje_admin == 'Registro Administrativo Directo' and s.estado != 'Cancelada' %}
+                                        <div style="margin-left: 10px; display: flex; gap: 8px;">
+                                            <a href="{{ url_for('modificar_solicitud', id=s.id) }}" class="btn-action-small btn-edit">Editar</a>
+                                            
+                                            <form action="{{ url_for('admin_forzar_cancelacion', id=s.id) }}" method="POST" style="margin: 0;">
+                                                <button type="submit" class="btn-action-small btn-delete" onclick="return confirm('¿Seguro que deseas CANCELAR esta suspensión administrativa?');">Eliminar</button>
+                                            </form>
+                                        </div>
+                                    {% endif %}
+                                    
                                 {% endif %}
-                                
-                            {% endif %}
-                        </div>
-                    </td>
-                </tr>
-                {% endfor %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
             </table>
             <p style="font-size:12px; color:#666; margin-top:20px;">*Nota: Los permisos "Aprobados" serán bloqueados en el próximo cálculo de la IA y cubiertos por comodines.</p>
         </div>
@@ -159,5 +163,74 @@
         </div>
 
     </div>
+
+    <script>
+        function renderSolicitudes(data) {
+            const body = document.getElementById('solicitudes-body');
+            if (!body) {
+                return;
+            }
+
+            const solicitudes = data.solicitudes || [];
+            let html = '';
+
+            solicitudes.forEach((s) => {
+                let acciones = '';
+
+                if (s.estado === 'Pendiente') {
+                    acciones = `
+                        <a href="/admin/solicitudes/estado/${s.id}/Aprobada" class="btn-action btn-approve">Aprobar</a>
+                        <a href="/admin/solicitudes/estado/${s.id}/Rechazada" class="btn-action btn-reject">Rechazar</a>
+                        <a href="/admin/solicitudes/modificar/${s.id}" class="btn-action-small btn-edit">Modificar</a>
+                    `;
+                } else if (s.estado === 'Pide Cancelación') {
+                    acciones = `
+                        <a href="/admin/solicitudes/confirmar_cancelacion/${s.id}" class="btn-action" style="background:#e1bee7; color:#4a148c; border:2px solid #ce93d8;">[ ? ] Aceptar Cancelación</a>
+                    `;
+                } else {
+                    acciones = '<span style="color:#b0bec5; font-style:italic;">Procesada</span>';
+                    if (s.mensaje_admin === 'Registro Administrativo Directo' && s.estado !== 'Cancelada') {
+                        acciones += `
+                            <div style="margin-left: 10px; display: flex; gap: 8px;">
+                                <a href="/admin/solicitudes/modificar/${s.id}" class="btn-action-small btn-edit">Editar</a>
+                                <form action="/admin/solicitudes/forzar_cancelacion/${s.id}" method="POST" style="margin: 0;">
+                                    <button type="submit" class="btn-action-small btn-delete" onclick="return confirm('¿Seguro que deseas CANCELAR esta suspensión administrativa?');">Eliminar</button>
+                                </form>
+                            </div>
+                        `;
+                    }
+                }
+
+                const mensaje = s.mensaje_admin ? `<br><i style="font-size:11px; color:#666;">${s.mensaje_admin}</i>` : '';
+
+                html += `
+                    <tr>
+                        <td>${s.empleado}</td>
+                        <td><b>${s.fecha}</b></td>
+                        <td>${s.motivo}${mensaje}</td>
+                        <td><b>${s.estado}</b></td>
+                        <td><div class="action-container">${acciones}</div></td>
+                    </tr>
+                `;
+            });
+
+            body.innerHTML = html;
+        }
+
+        async function refrescarSolicitudesAdmin() {
+            try {
+                const resp = await fetch('/admin/solicitudes/estado', { cache: 'no-store' });
+                if (!resp.ok) {
+                    return;
+                }
+                const data = await resp.json();
+                renderSolicitudes(data);
+            } catch (err) {
+                console.error('Error al actualizar solicitudes admin', err);
+            }
+        }
+
+        setInterval(refrescarSolicitudesAdmin, 15000);
+    </script>
 </body>
 </html>

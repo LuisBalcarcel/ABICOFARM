@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Portal Empleado - Permisos</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap');
+        body { font-family: 'Montserrat', sans-serif; background-color: #f4f7f6; margin: 0; display: flex; min-height: 100vh; color: #003366; }
+        .sidebar { width: 240px; background-color: #003366; color: white; padding: 20px; box-sizing: border-box; }
+        .brand { color: #ff6b00; font-size: 20px; font-weight: 700; line-height: 1.1; margin-bottom: 40px; }
+        .brand span { color: white; font-size: 12px; }
+        .menu-item { padding: 15px 10px; margin-bottom: 5px; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; color: #a0aec0; text-decoration: none; display: block; }
+        .menu-item.active { background-color: #ff6b00; color: white; }
+        .main-content { flex: 1; padding: 40px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        input, select { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ccc; border-radius: 8px; font-family: 'Montserrat'; box-sizing: border-box; }
+        button { background-color: #ff6b00; color: white; border: none; padding: 10px 15px; border-radius: 8px; cursor: pointer; font-weight: bold; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        td, th { padding: 10px; border-bottom: 1px solid #eee; font-size: 13px; }
+        .estado-aprobada { color: green; font-weight: bold; }
+        .estado-rechazada { color: red; font-weight: bold; }
+        .estado-pendiente { color: orange; font-weight: bold; }
+        .estado-cancelada { color: red; font-weight: bold; }
+        .estado-pide-cancelacion { color: purple; font-weight: bold; }
+        .logout { color: #ff6b00; font-weight: bold; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <div class="brand">Bienestar<br>Comunitario<br><span>FARMACÉUTICO</span></div>
+        <a href="{{ url_for('empleado_horario') }}" class="menu-item">Mi Horario</a>
+        <a href="{{ url_for('empleado_permisos') }}" class="menu-item active">Permisos</a>
+        <div style="margin-top: 50px;">
+            <p style="font-size:12px; color:#a0aec0;">Usuario: {{ user.nombre }}</p>
+            <a href="{{ url_for('logout') }}" class="logout">Cerrar Sesion</a>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <div class="card">
+            <h3 style="margin-top:0;">Solicitar Permiso (Ausencia)</h3>
+            <form action="{{ url_for('nueva_solicitud_empleado') }}" method="POST">
+                <label>Fecha exacta a faltar:</label>
+                <input type="date" name="fecha" required>
+                <label>Motivo:</label>
+                <input type="text" name="motivo" placeholder="Ej. Cita médica, Asunto personal..." required>
+                <button type="submit">Enviar Solicitud</button>
+            </form>
+        </div>
+
+        <div class="card">
+            <h3 style="margin-top:0;">Estado de mis solicitudes</h3>
+            <table>
+                <thead>
+                    <tr><th>Fecha</th><th>Motivo</th><th>Estado</th><th>Respuesta Admin</th><th>Acción</th></tr>
+                </thead>
+                <tbody id="solicitudes-body">
+                    {% for s in solicitudes %}
+                    <tr>
+                        <td>{{ s.fecha }}</td>
+                        <td>{{ s.motivo }}</td>
+                        <td class="{% if 'Aprobada' in s.estado %}estado-aprobada{% elif s.estado=='Rechazada' or s.estado=='Cancelada' %}estado-rechazada{% elif s.estado=='Pide Cancelación' %}estado-pide-cancelacion{% else %}estado-pendiente{% endif %}">{{ s.estado }}</td>
+                        <td style="font-size:12px; color:#666;">{{ s.mensaje_admin if s.mensaje_admin else '-' }}</td>
+                        <td>
+                            {% if 'Aprobada' in s.estado and s.mensaje_admin != 'Registro Administrativo Directo' %}
+                            <form action="{{ url_for('solicitar_cancelacion', id=s.id) }}" method="POST" style="margin:0;">
+                                <button type="submit" style="background:#ffebee; color:#d32f2f; padding:5px 10px; border-radius:4px; border:none; cursor:pointer; font-size:12px; font-weight:bold;" onclick="return confirm('¿Seguro que deseas cancelar este permiso?');">Cancelar</button>
+                            </form>
+                            {% elif s.mensaje_admin == 'Registro Administrativo Directo' %}
+                                <span style="font-size: 11px; color: #999;">-</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        function estadoClase(estado) {
+            if (estado.includes('Aprobada')) {
+                return 'estado-aprobada';
+            }
+            if (estado === 'Rechazada' || estado === 'Cancelada') {
+                return 'estado-rechazada';
+            }
+            if (estado === 'Pide Cancelación') {
+                return 'estado-pide-cancelacion';
+            }
+            return 'estado-pendiente';
+        }
+
+        function renderSolicitudes(data) {
+            const body = document.getElementById('solicitudes-body');
+            if (!body) {
+                return;
+            }
+
+            const solicitudes = data.solicitudes || [];
+            let html = '';
+
+            solicitudes.forEach((s) => {
+                const clase = estadoClase(s.estado);
+                const mensaje = s.mensaje_admin || '-';
+                let accion = '';
+
+                if (s.estado.includes('Aprobada') && s.mensaje_admin !== 'Registro Administrativo Directo') {
+                    accion = `
+                        <form action="/empleado/solicitud/cancelar/${s.id}" method="POST" style="margin:0;">
+                            <button type="submit" style="background:#ffebee; color:#d32f2f; padding:5px 10px; border-radius:4px; border:none; cursor:pointer; font-size:12px; font-weight:bold;" onclick="return confirm('¿Seguro que deseas cancelar este permiso?');">Cancelar</button>
+                        </form>
+                    `;
+                } else if (s.mensaje_admin === 'Registro Administrativo Directo') {
+                    accion = '<span style="font-size: 11px; color: #999;">-</span>';
+                }
+
+                html += `
+                    <tr>
+                        <td>${s.fecha}</td>
+                        <td>${s.motivo}</td>
+                        <td class="${clase}">${s.estado}</td>
+                        <td style="font-size:12px; color:#666;">${mensaje}</td>
+                        <td>${accion}</td>
+                    </tr>
+                `;
+            });
+
+            body.innerHTML = html;
+        }
+
+        async function refrescarSolicitudes() {
+            try {
+                const resp = await fetch('/empleado/estado', { cache: 'no-store' });
+                if (!resp.ok) {
+                    return;
+                }
+                const data = await resp.json();
+                renderSolicitudes(data);
+            } catch (err) {
+                console.error('Error al actualizar solicitudes del empleado', err);
+            }
+        }
+
+        setInterval(refrescarSolicitudes, 15000);
+    </script>
+</body>
+</html>
