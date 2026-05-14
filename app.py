@@ -40,6 +40,13 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
+
+def es_registro_administrativo_msg(mensaje_admin):
+    """Suspensión / falta cargada por el admin (no es un permiso del empleado)."""
+    m = (mensaje_admin or '').strip()
+    return m == 'Registro Administrativo Directo' or m.startswith('Registro Administrativo Directo ·')
+
+
 # --- MODELOS DE BASE DE DATOS ---
 class Farmacia(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -239,6 +246,12 @@ def proteger_rutas_con_sesion():
 
     return None
 
+
+@app.context_processor
+def inject_template_helpers():
+    return {'es_registro_administrativo_msg': es_registro_administrativo_msg}
+
+
 @app.route('/admin')
 def admin_dashboard():
     if 'user_id' not in session or session.get('rol') != 'Admin':
@@ -298,7 +311,7 @@ def admin_forzar_cancelacion(id):
         return redirect(url_for('login'))
         
     solicitud = Solicitud.query.get(id)
-    if solicitud and solicitud.mensaje_admin == 'Registro Administrativo Directo':
+    if solicitud and es_registro_administrativo_msg(solicitud.mensaje_admin):
         solicitud.estado = 'Cancelada'
         db.session.commit()
         flash('Suspensión administrativa cancelada exitosamente. Se recomienda ejecutar el Motor de IA para actualizar.', 'success')
@@ -386,7 +399,7 @@ def cambiar_estado_solicitud(id, estado):
             Solicitud.id != solicitud.id,
             Solicitud.empleado_id == solicitud.empleado_id,
             Solicitud.fecha == solicitud.fecha,
-            Solicitud.mensaje_admin == 'Registro Administrativo Directo',
+            Solicitud.mensaje_admin.like('Registro Administrativo Directo%'),
             Solicitud.estado.in_(['Aprobada', 'Modificada (Aprobada)']),
         ).first()
         if not sus:
@@ -416,7 +429,7 @@ def modificar_solicitud(id):
         return redirect(url_for('admin_solicitudes'))
 
     cobertura_opciones = Empleado.query.filter(Empleado.rol.in_(['Dependiente', 'Comodin'])).all()
-    es_registro = solicitud.mensaje_admin == 'Registro Administrativo Directo'
+    es_registro = es_registro_administrativo_msg(solicitud.mensaje_admin)
 
     if request.method == 'POST':
         solicitud.fecha = request.form['nueva_fecha']
@@ -586,7 +599,7 @@ def construir_estado_empleado(empleado_id):
 
             # Solo sobrescribimos si no le tocó turno en otra farmacia ese mismo día
             if dia_semana not in mi_horario or mi_horario[dia_semana] == 'Descanso':
-                if perm.mensaje_admin == 'Registro Administrativo Directo':
+                if es_registro_administrativo_msg(perm.mensaje_admin):
                     mi_horario[dia_semana] = 'Suspensión'
                 elif perm.tipo_permiso == 'parcial' and perm.hora_retorno:
                     mi_horario[dia_semana] = f"Permiso parcial hasta {perm.hora_retorno}"
@@ -669,7 +682,7 @@ def empleado_horario_json():
 
         if fecha_iso in aprobadas_por_fecha:
             permiso = aprobadas_por_fecha[fecha_iso]
-            if permiso.mensaje_admin == 'Registro Administrativo Directo':
+            if es_registro_administrativo_msg(permiso.mensaje_admin):
                 resultado.append({
                     'dia': dias_nombre[i],
                     'fecha': fecha_iso,
@@ -1222,7 +1235,7 @@ def ver_horarios_ia():
                     }
                 # Solo sobrescribe si no le asignaron turno
                 if dia_semana not in empleados_agrupados[emp.nombre]['dias']:
-                    if perm.mensaje_admin == 'Registro Administrativo Directo':
+                    if es_registro_administrativo_msg(perm.mensaje_admin):
                         empleados_agrupados[emp.nombre]['dias'][dia_semana] = 'Suspensión'
                     else:
                         empleados_agrupados[emp.nombre]['dias'][dia_semana] = 'Permiso Aprobado'
@@ -1304,7 +1317,7 @@ def solicitar_cancelacion(id):
     solicitud = Solicitud.query.get(id)
     
     # Bloquear intento de cancelar suspensiones
-    if solicitud and solicitud.mensaje_admin == 'Registro Administrativo Directo':
+    if solicitud and es_registro_administrativo_msg(solicitud.mensaje_admin):
         flash('No tienes permiso para cancelar registros administrativos.', 'error')
         return redirect(url_for('empleado_permisos'))
         
@@ -1319,6 +1332,54 @@ def solicitar_cancelacion(id):
         
     return redirect(url_for('empleado_permisos'))
 
+
+@app.route('/empleado/solicitud/impugnar', methods=['POST'])
+def empleado_impugnar_consecuencia():
+    if 'user_id' not in session or session.get('rol') == 'Admin':
+        return redirect(url_for('login'))
+
+    empleado_id = session['user_id']
+    sid = request.form.get('suspension_solicitud_id', type=int)
+    motivo = (request.form.get('motivo') or '').strip()
+
+    susp = Solicitud.query.get(sid)
+    if not susp or susp.empleado_id != empleado_id:
+        flash('Solicitud no válida.', 'error')
+        return redirect(url_for('empleado_permisos'))
+
+    if not es_registro_administrativo_msg(susp.mensaje_admin):
+        flash('Solo puedes impugnar sanciones registradas por administración.', 'error')
+        return redirect(url_for('empleado_permisos'))
+
+    if susp.estado not in ('Aprobada', 'Modificada (Aprobada)'):
+        flash('Esta sanción ya no admite impugnación en este estado.', 'error')
+        return redirect(url_for('empleado_permisos'))
+
+    if len(motivo) < 5:
+        flash('Describe el motivo de la impugnación (al menos 5 caracteres).', 'error')
+        return redirect(url_for('empleado_permisos'))
+
+    for p in Solicitud.query.filter_by(empleado_id=empleado_id, fecha=susp.fecha, estado='Pendiente').all():
+        if categoria_solicitud(p) == 'cancelacion_falta':
+            flash('Ya tienes una impugnación pendiente para esa fecha.', 'error')
+            return redirect(url_for('empleado_permisos'))
+
+    nueva = Solicitud(
+        empleado_id=empleado_id,
+        fecha=susp.fecha,
+        motivo=motivo,
+        estado='Pendiente',
+        mensaje_admin='',
+        tipo_permiso='dia_completo',
+        hora_retorno=None,
+        categoria='cancelacion_falta',
+    )
+    db.session.add(nueva)
+    db.session.commit()
+    flash('Impugnación enviada. El administrador la revisará.', 'success')
+    return redirect(url_for('empleado_permisos'))
+
+
 @app.route('/empleado/solicitud/nueva', methods=['POST'])
 def nueva_solicitud_empleado():
     if 'user_id' not in session or session.get('rol') == 'Admin':
@@ -1329,7 +1390,7 @@ def nueva_solicitud_empleado():
     tipo_permiso = request.form.get('tipo_permiso', 'dia_completo')
     hora_retorno = request.form.get('hora_retorno', '').strip()
     categoria = (request.form.get('categoria') or 'permiso').strip()
-    if categoria not in ('permiso', 'cambio_descanso', 'cancelacion_falta'):
+    if categoria not in ('permiso', 'cambio_descanso'):
         categoria = 'permiso'
 
     if categoria == 'permiso':
@@ -1376,22 +1437,13 @@ def nueva_solicitud_empleado():
         db.session.commit()
         return jsonify({'status': 'ok'})
 
-    # cancelacion_falta
-    if not fecha or not motivo:
-        return jsonify({'status': 'error', 'mensaje': 'Indica la fecha de la falta y el motivo de la impugnación.'}), 400
-    nueva = Solicitud(
-        empleado_id=session['user_id'],
-        fecha=fecha,
-        motivo=motivo,
-        estado='Pendiente',
-        mensaje_admin='',
-        tipo_permiso='dia_completo',
-        hora_retorno=None,
-        categoria='cancelacion_falta',
-    )
-    db.session.add(nueva)
-    db.session.commit()
-    return jsonify({'status': 'ok'})
+    if categoria == 'cancelacion_falta':
+        return jsonify({
+            'status': 'error',
+            'mensaje': 'Para impugnar una sanción administrativa usa el botón «Impugnar» en la tabla Mis solicitudes.',
+        }), 400
+
+    return jsonify({'status': 'error', 'mensaje': 'Tipo de solicitud no reconocido.'}), 400
 
 
 @app.route('/empleado/solicitudes/json')

@@ -26,6 +26,12 @@
         .estado-cancelada { color: red; font-weight: bold; }
         .estado-pide-cancelacion { color: purple; font-weight: bold; }
         .logout { color: #ff6b00; font-weight: bold; text-decoration: none; }
+        .sidebar-logout {
+            display: block; margin-top: 14px; padding: 14px 12px; text-align: center;
+            background: #ff6b00; color: #fff !important; border-radius: 8px; font-weight: 700;
+            font-size: 14px; text-decoration: none; box-sizing: border-box;
+        }
+        .sidebar-logout:hover { filter: brightness(1.08); }
         .grid-forms { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
     </style>
 </head>
@@ -37,11 +43,22 @@
         <a href="{{ url_for('empleado_perfil') }}" class="menu-item">Mi Perfil</a>
         <div style="margin-top: 50px;">
             <p style="font-size:12px; color:#a0aec0;">Usuario: {{ user.nombre }}</p>
-            <a href="{{ url_for('logout') }}" class="logout">Cerrar Sesion</a>
+            <a href="{{ url_for('logout') }}" class="sidebar-logout">Cerrar sesión</a>
         </div>
     </div>
 
     <div class="main-content">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div style="padding:12px 16px; border-radius:8px; margin-bottom:8px; font-size:14px; font-weight:600;
+                {% if category == 'error' %}background:#ffebee;color:#c62828;{% elif category == 'success' %}background:#e8f5e9;color:#2e7d32;{% else %}background:#e3f2fd;color:#1565c0;{% endif %}">
+                {{ message }}
+              </div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
         <div class="grid-forms">
             <div class="card">
                 <h3>Permiso laboral</h3>
@@ -92,20 +109,6 @@
                 </form>
                 <div id="msg-descanso" style="margin-top:8px; font-size:12px;"></div>
             </div>
-
-            <div class="card">
-                <h3>Impugnar falta administrativa</h3>
-                <p class="card-sub">Si el administrador registró una falta/suspensión y consideras que debe revisarse, indica la <b>misma fecha</b> del registro y el motivo. El admin acepta o rechaza.</p>
-                <form id="solicitud-falta" action="{{ url_for('nueva_solicitud_empleado') }}" method="POST">
-                    <input type="hidden" name="categoria" value="cancelacion_falta">
-                    <label>Fecha de la falta registrada:</label>
-                    <input type="date" name="fecha" required>
-                    <label>Motivo de la impugnación:</label>
-                    <textarea name="motivo" rows="3" placeholder="Describe por qué solicitas la revisión…" required></textarea>
-                    <button type="submit" class="primary" style="margin-top:12px;">Enviar</button>
-                </form>
-                <div id="msg-falta" style="margin-top:8px; font-size:12px;"></div>
-            </div>
         </div>
 
         <div class="card">
@@ -121,26 +124,33 @@
                         <td>{{ s.fecha }}</td>
                         <td>{{ s.motivo }}{% if s.nota_empleado %}<br><small style="color:#5c6bc0;">Nota: {{ s.nota_empleado }}</small>{% endif %}</td>
                         <td>
-                            {% set cat = s.categoria or 'permiso' %}
-                            {% if cat == 'cambio_descanso' and s.dia_descanso_solicitado is not none %}
+                            {% if es_registro_administrativo_msg(s.mensaje_admin) %}
+                                Suspensión / consecuencia administrativa
+                            {% elif (s.categoria or 'permiso') == 'cambio_descanso' and s.dia_descanso_solicitado is not none %}
                                 Cambio descanso → {{ dias_c[s.dia_descanso_solicitado] }}
-                            {% elif cat == 'cancelacion_falta' %}
+                            {% elif (s.categoria or 'permiso') == 'cancelacion_falta' %}
                                 Impugnación falta
                             {% elif s.tipo_permiso == 'parcial' %}
                                 Parcial (entra {{ s.hora_retorno }})
                             {% else %}
-                                Permiso día completo
+                                Permiso laboral (día completo)
                             {% endif %}
                         </td>
                         <td class="{% if 'Aprobada' in s.estado %}estado-aprobada{% elif s.estado=='Rechazada' or s.estado=='Cancelada' %}estado-rechazada{% elif s.estado=='Pide Cancelación' %}estado-pide-cancelacion{% else %}estado-pendiente{% endif %}">{{ s.estado }}</td>
                         <td style="font-size:12px; color:#666;">{{ s.mensaje_admin if s.mensaje_admin else '-' }}</td>
                         <td>
-                            {% if 'Aprobada' in s.estado and s.mensaje_admin != 'Registro Administrativo Directo' %}
+                            {% if 'Aprobada' in s.estado and not es_registro_administrativo_msg(s.mensaje_admin) %}
                             <form action="{{ url_for('solicitar_cancelacion', id=s.id) }}" method="POST" style="margin:0;">
                                 <textarea name="nota_empleado" rows="2" placeholder="Motivo de la cancelación (opcional)" style="font-size:11px; margin-bottom:4px;"></textarea>
                                 <button type="submit" class="soft" onclick="return confirm('¿Solicitar cancelación de este permiso al administrador?');">Solicitar cancelación</button>
                             </form>
-                            {% elif s.mensaje_admin == 'Registro Administrativo Directo' %}
+                            {% elif es_registro_administrativo_msg(s.mensaje_admin) and s.estado in ['Aprobada', 'Modificada (Aprobada)'] %}
+                            <form action="{{ url_for('empleado_impugnar_consecuencia') }}" method="POST" style="margin:0; max-width:240px;">
+                                <input type="hidden" name="suspension_solicitud_id" value="{{ s.id }}">
+                                <textarea name="motivo" rows="2" placeholder="Motivo de la impugnación" required minlength="5" style="font-size:11px; margin-bottom:4px;"></textarea>
+                                <button type="submit" class="soft" style="background:#fff3e0;color:#bf360c;">Impugnar</button>
+                            </form>
+                            {% elif es_registro_administrativo_msg(s.mensaje_admin) %}
                                 <span style="font-size: 11px; color: #999;">—</span>
                             {% endif %}
                         </td>
@@ -159,7 +169,15 @@
             return 'estado-pendiente';
         }
 
+        function esRegistroAdministrativoMsg(ma) {
+            const m = (ma || '').trim();
+            return m === 'Registro Administrativo Directo' || m.startsWith('Registro Administrativo Directo ·');
+        }
+
         function etiquetaTipo(s) {
+            if (esRegistroAdministrativoMsg(s.mensaje_admin)) {
+                return 'Suspensión / consecuencia administrativa';
+            }
             const cat = (s.categoria || 'permiso').trim();
             const dn = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
             if (cat === 'cambio_descanso') {
@@ -168,7 +186,7 @@
             }
             if (cat === 'cancelacion_falta') return 'Impugnación falta';
             if (s.tipo_permiso === 'parcial') return `Parcial (entra ${s.hora_retorno || '—'})`;
-            return 'Permiso día completo';
+            return 'Permiso laboral (día completo)';
         }
 
         function renderSolicitudes(data) {
@@ -184,14 +202,22 @@
                 const nota = s.nota_empleado ? `<br><small style="color:#5c6bc0;">Nota: ${s.nota_empleado}</small>` : '';
                 let accion = '';
 
-                if (s.estado.includes('Aprobada') && s.mensaje_admin !== 'Registro Administrativo Directo') {
+                if (s.estado.includes('Aprobada') && !esRegistroAdministrativoMsg(s.mensaje_admin)) {
                     accion = `
                         <form action="/empleado/solicitud/cancelar/${s.id}" method="POST" style="margin:0;">
                             <textarea name="nota_empleado" rows="2" placeholder="Motivo (opcional)" style="font-size:11px; margin-bottom:4px;"></textarea>
                             <button type="submit" class="soft" onclick="return confirm('¿Solicitar cancelación al administrador?');">Solicitar cancelación</button>
                         </form>
                     `;
-                } else if (s.mensaje_admin === 'Registro Administrativo Directo') {
+                } else if (esRegistroAdministrativoMsg(s.mensaje_admin) && s.estado.includes('Aprobada')) {
+                    accion = `
+                        <form action="/empleado/solicitud/impugnar" method="POST" style="margin:0;max-width:240px;">
+                            <input type="hidden" name="suspension_solicitud_id" value="${s.id}">
+                            <textarea name="motivo" rows="2" placeholder="Motivo de la impugnación" required minlength="5" style="font-size:11px;margin-bottom:4px;"></textarea>
+                            <button type="submit" class="soft" style="background:#fff3e0;color:#bf360c;">Impugnar</button>
+                        </form>
+                    `;
+                } else if (esRegistroAdministrativoMsg(s.mensaje_admin)) {
                     accion = '<span style="font-size: 11px; color: #999;">—</span>';
                 }
 
@@ -256,10 +282,6 @@
         document.getElementById('solicitud-descanso')?.addEventListener('submit', (e) => {
             e.preventDefault();
             enviarFormulario(e.target, document.getElementById('msg-descanso'));
-        });
-        document.getElementById('solicitud-falta')?.addEventListener('submit', (e) => {
-            e.preventDefault();
-            enviarFormulario(e.target, document.getElementById('msg-falta'));
         });
 
         const permisoRadios = document.querySelectorAll('#solicitud-permiso input[name="tipo_permiso"]');

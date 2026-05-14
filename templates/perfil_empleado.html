@@ -19,6 +19,12 @@
         input[type="text"], input[type="password"] { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ccc; border-radius: 8px; font-family: 'Montserrat'; box-sizing: border-box; }
         button { background-color: #FF6B00; color: white; border: none; padding: 10px 15px; border-radius: 8px; cursor: pointer; font-weight: bold; }
         .logout { color: #FF6B00; font-weight: bold; text-decoration: none; }
+        .sidebar-logout {
+            display: block; margin-top: 14px; padding: 14px 12px; text-align: center;
+            background: #FF6B00; color: #fff !important; border-radius: 8px; font-weight: 700;
+            font-size: 14px; text-decoration: none; box-sizing: border-box;
+        }
+        .sidebar-logout:hover { filter: brightness(1.08); }
         .toast { margin-top: 10px; font-size: 12px; padding: 8px 10px; border-radius: 6px; display: none; }
         .toast.exito { background: #e8f5e9; color: #2e7d32; display: block; }
         .toast.error { background: #ffebee; color: #c62828; display: block; }
@@ -32,7 +38,7 @@
         <a href="{{ url_for('empleado_perfil') }}" class="menu-item active">Mi Perfil</a>
         <div style="margin-top: 50px;">
             <p style="font-size:12px; color:#a0aec0;">Usuario: {{ user.nombre }}</p>
-            <a href="{{ url_for('logout') }}" class="logout">Cerrar Sesion</a>
+            <a href="{{ url_for('logout') }}" class="sidebar-logout">Cerrar sesión</a>
         </div>
     </div>
 

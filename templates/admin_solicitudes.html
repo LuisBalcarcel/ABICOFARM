@@ -85,19 +85,17 @@
                         <td><b>{{ s.fecha }}</b></td>
                         <td>{{ s.motivo }}<br><i style="font-size:11px; color:#666;">{{ s.mensaje_admin }}</i>{% if s.nota_empleado %}<br><small style="color:#5c6bc0;">Nota empleado: {{ s.nota_empleado }}</small>{% endif %}</td>
                         <td>
-                            {% set cat = s.categoria or 'permiso' %}
-                            {% if cat == 'cambio_descanso' %}
-                                Cambio de día de descanso
-                                {% if s.dia_descanso_solicitado is not none %}
-                                    {% set dn = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'] %}
-                                    <br><b>→ {{ dn[s.dia_descanso_solicitado] }}</b>
-                                {% endif %}
-                            {% elif cat == 'cancelacion_falta' %}
+                            {% if es_registro_administrativo_msg(s.mensaje_admin) %}
+                                Suspensión / consecuencia administrativa
+                            {% elif (s.categoria or 'permiso') == 'cambio_descanso' and s.dia_descanso_solicitado is not none %}
+                                {% set dn = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'] %}
+                                Cambio de día de descanso<br><b>→ {{ dn[s.dia_descanso_solicitado] }}</b>
+                            {% elif (s.categoria or 'permiso') == 'cancelacion_falta' %}
                                 Impugnación falta administrativa
                             {% elif s.tipo_permiso == 'parcial' %}
                                 Parcial (entra {{ s.hora_retorno }}){% if s.cobertura_empleado %}<br><i style="font-size:11px; color:#666;">Reemplazo: {{ s.cobertura_empleado.nombre }}</i>{% endif %}
                             {% else %}
-                                Permiso día completo
+                                Permiso laboral (día completo)
                             {% endif %}
                         </td>
                         <td><b>{{ s.estado }}</b></td>
@@ -106,7 +104,7 @@
                                 {% if s.estado == 'Pendiente' %}
                                     <button type="button" class="btn-action btn-approve" data-action="aprobar" data-id="{{ s.id }}">Aprobar</button>
                                     <button type="button" class="btn-action btn-reject" data-action="rechazar" data-id="{{ s.id }}">Rechazar</button>
-                                    {% if (s.categoria or 'permiso') == 'permiso' %}
+                                    {% if (s.categoria or 'permiso') == 'permiso' and not es_registro_administrativo_msg(s.mensaje_admin) %}
                                     <a href="{{ url_for('modificar_solicitud', id=s.id) }}" class="btn-action-small btn-edit">Modificar</a>
                                     {% endif %}
                                 
@@ -118,7 +116,7 @@
                                     <span style="color:#b0bec5; font-style:italic;">Procesada</span>
                                     
                                     <!-- NUEVO: Permitir al Admin cancelar y modificar SUS PROPIOS registros directos -->
-                                    {% if s.mensaje_admin == 'Registro Administrativo Directo' and s.estado != 'Cancelada' %}
+                                    {% if es_registro_administrativo_msg(s.mensaje_admin) and s.estado != 'Cancelada' %}
                                         <div style="margin-left: 10px; display: flex; gap: 8px;">
                                             <a href="{{ url_for('modificar_solicitud', id=s.id) }}" class="btn-action-small btn-edit">Editar</a>
                                             
@@ -183,6 +181,11 @@
     </div>
 
     <script>
+        function esRegistroAdmMsg(ma) {
+            const m = (ma || '').trim();
+            return m === 'Registro Administrativo Directo' || m.startsWith('Registro Administrativo Directo ·');
+        }
+
         function renderSolicitudes(data) {
             const body = document.getElementById('solicitudes-body');
             if (!body) {
@@ -201,7 +204,7 @@
                         <button type="button" class="btn-action btn-approve" data-action="aprobar" data-id="${s.id}">Aprobar</button>
                         <button type="button" class="btn-action btn-reject" data-action="rechazar" data-id="${s.id}">Rechazar</button>
                     `;
-                    if (cat === 'permiso') {
+                    if (cat === 'permiso' && !esRegistroAdmMsg(s.mensaje_admin)) {
                         acciones += `<a href="/admin/solicitudes/modificar/${s.id}" class="btn-action-small btn-edit">Modificar</a>`;
                     }
                 } else if (s.estado === 'Pide Cancelación') {
@@ -211,7 +214,7 @@
                     `;
                 } else {
                     acciones = '<span style="color:#b0bec5; font-style:italic;">Procesada</span>';
-                    if (s.mensaje_admin === 'Registro Administrativo Directo' && s.estado !== 'Cancelada') {
+                    if (esRegistroAdmMsg(s.mensaje_admin) && s.estado !== 'Cancelada') {
                         acciones += `
                             <div style="margin-left: 10px; display: flex; gap: 8px;">
                                 <a href="/admin/solicitudes/modificar/${s.id}" class="btn-action-small btn-edit">Editar</a>
@@ -224,8 +227,10 @@
                 const mensaje = s.mensaje_admin ? `<br><i style="font-size:11px; color:#666;">${s.mensaje_admin}</i>` : '';
                 const notaEmp = s.nota_empleado ? `<br><small style="color:#5c6bc0;">Nota empleado: ${s.nota_empleado}</small>` : '';
 
-                let tipo = 'Permiso día completo';
-                if (cat === 'cambio_descanso') {
+                let tipo = 'Permiso laboral (día completo)';
+                if (esRegistroAdmMsg(s.mensaje_admin)) {
+                    tipo = 'Suspensión / consecuencia administrativa';
+                } else if (cat === 'cambio_descanso') {
                     const dn = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
                     const di = Number.isInteger(s.dia_descanso_solicitado) ? s.dia_descanso_solicitado : parseInt(s.dia_descanso_solicitado, 10);
                     tipo = `Cambio descanso → ${dn[di] || '?'}`;

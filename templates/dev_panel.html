@@ -9,8 +9,22 @@
         .header { display: flex; justify-content: space-between; align-items: center; padding: 20px 30px; border-bottom: 1px solid #1f2937; }
         .title { font-size: 20px; font-weight: 700; color: #FF6B00; }
         .actions { display: flex; gap: 12px; align-items: center; }
-        .btn { background: #FF6B00; color: #0d1117; border: none; padding: 10px 14px; border-radius: 8px; font-weight: 700; cursor: pointer; }
+        .btn { background: #FF6B00; color: #0d1117; border: none; padding: 10px 14px; border-radius: 8px; font-weight: 700; cursor: pointer; font-family: inherit; font-size: 13px; }
+        .btn-logout-user {
+            background: #dc2626;
+            color: #fff;
+            margin-left: 8px;
+            border: none;
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-weight: 700;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 13px;
+        }
+        .btn-logout-user:hover { filter: brightness(1.06); }
         .link { color: #e6edf3; text-decoration: none; font-weight: 600; }
+        .btn-secondary { background: #374151; color: #e6edf3; border: none; padding: 10px 14px; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 13px; text-decoration: none; display: inline-block; }
         .container { padding: 30px; display: grid; gap: 24px; }
         .card { background: #111827; border: 1px solid #1f2937; border-radius: 12px; padding: 20px; }
         h2 { margin: 0 0 15px 0; font-size: 16px; color: #FF6B00; }
@@ -35,7 +49,7 @@
         <div class="title">🛠️ Panel del Desarrollador — ABICOFARM v1.0</div>
         <div class="actions">
             <button class="btn" id="btnActualizar">🔄 Actualizar</button>
-            <a href="{{ url_for('logout') }}" class="link">← Salir</a>
+            <a href="{{ url_for('logout') }}" class="btn-secondary">← Cerrar mi sesión</a>
         </div>
     </div>
 
@@ -248,7 +262,7 @@
                     <td>${u.sucursal}</td>
                     <td>${u.ultimo_login || '-'}</td>
                     <td data-ultimo-login="${u.ultimo_login || ''}">${formatearTiempo(u.ultimo_login)}</td>
-                    <td><button onclick="forzarLogout(${u.id}, ${JSON.stringify(u.nombre)})" style="background:#dc3545; color:white; border:none; padding:4px 10px; border-radius:4px; cursor:pointer; margin-left:4px;">⏏ Logout</button></td>
+                    <td><button type="button" class="btn-logout-user" data-forzar-logout-id="${u.id}" data-forzar-logout-nombre="${encodeURIComponent(u.nombre)}">⏏ Cerrar sesión</button></td>
                 </tr>
             `).join('');
 
@@ -262,7 +276,10 @@
                     <td>${u.sucursal}</td>
                     <td>${u.ultimo_login || '-'}</td>
                     <td>${renderEstadoUsuario(u)}</td>
-                    <td><button class="btn" data-reset-id="${u.id}" data-reset-nombre="${u.nombre}">🔑 Reset</button><button onclick="forzarLogout(${u.id}, ${JSON.stringify(u.nombre)})" style="background:#dc3545; color:white; border:none; padding:4px 10px; border-radius:4px; cursor:pointer; margin-left:4px;">⏏ Logout</button></td>
+                    <td>
+                        <button type="button" class="btn" data-reset-id="${u.id}" data-reset-nombre="${encodeURIComponent(u.nombre)}">🔑 Reset</button>
+                        <button type="button" class="btn-logout-user" data-forzar-logout-id="${u.id}" data-forzar-logout-nombre="${encodeURIComponent(u.nombre)}">⏏ Cerrar sesión</button>
+                    </td>
                 </tr>
             `).join('');
         }
@@ -292,6 +309,14 @@
         }
 
         document.addEventListener('click', (event) => {
+            const logoutBtn = event.target.closest('[data-forzar-logout-id]');
+            if (logoutBtn) {
+                const id = logoutBtn.getAttribute('data-forzar-logout-id');
+                const nombre = decodeURIComponent(logoutBtn.getAttribute('data-forzar-logout-nombre') || '');
+                forzarLogout(parseInt(id, 10), nombre);
+                return;
+            }
+
             const target = event.target;
             if (!target) {
                 return;
@@ -299,7 +324,7 @@
             const resetId = target.getAttribute('data-reset-id');
             if (resetId) {
                 usuarioSeleccionado = resetId;
-                resetNombre.textContent = `Usuario: ${target.getAttribute('data-reset-nombre')}`;
+                resetNombre.textContent = `Usuario: ${decodeURIComponent(target.getAttribute('data-reset-nombre') || '')}`;
                 resetInput.value = '';
                 resetDialog.showModal();
             }
