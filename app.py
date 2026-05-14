@@ -66,8 +66,12 @@ class Solicitud(db.Model):
     motivo = db.Column(db.String(200))
     estado = db.Column(db.String(50), default='Pendiente') # Pendiente, Aprobada, Rechazada, Modificada
     mensaje_admin = db.Column(db.String(200), default='') # Para la contraoferta
+    tipo_permiso = db.Column(db.String(20), default='dia_completo', server_default='dia_completo')
+    hora_retorno = db.Column(db.String(10), nullable=True)
+    cobertura_empleado_id = db.Column(db.Integer, db.ForeignKey('empleado.id'), nullable=True)
     
     empleado = db.relationship('Empleado')
+    cobertura_empleado = db.relationship('Empleado', foreign_keys=[cobertura_empleado_id])
 
 class AsignacionTemporal(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -202,7 +206,10 @@ def admin_solicitudes_estado():
             'fecha': s.fecha,
             'motivo': s.motivo,
             'estado': s.estado,
-            'mensaje_admin': s.mensaje_admin or ''
+            'mensaje_admin': s.mensaje_admin or '',
+            'tipo_permiso': s.tipo_permiso or 'dia_completo',
+            'hora_retorno': s.hora_retorno or '',
+            'cobertura_empleado': s.cobertura_empleado.nombre if s.cobertura_empleado else ''
         })
 
     return jsonify({'solicitudes': payload})
@@ -250,6 +257,10 @@ def cambiar_estado_solicitud(id, estado):
     solicitud = Solicitud.query.get(id)
     if not solicitud or estado not in ['Aprobada', 'Rechazada']:
         return redirect(url_for('admin_solicitudes'))
+
+    if estado == 'Aprobada' and solicitud.tipo_permiso == 'parcial' and not solicitud.cobertura_empleado_id:
+        flash('Para aprobar un permiso parcial debes seleccionar un reemplazo.', 'error')
+        return redirect(url_for('modificar_solicitud', id=id))
 
     # IA Auto-gestión: cambios del admin no requieren validación adicional
     # El admin ES la autorización. Cualquier acción suya se ejecuta inmediatamente.
@@ -302,14 +313,43 @@ def modificar_solicitud(id):
         return redirect(url_for('login'))
         
     solicitud = Solicitud.query.get(id)
+    cobertura_opciones = Empleado.query.filter(Empleado.rol.in_(['Dependiente', 'Comodin'])).all()
     if request.method == 'POST':
         solicitud.fecha = request.form['nueva_fecha']
         solicitud.mensaje_admin = request.form['mensaje']
+        cobertura_id = request.form.get('cobertura_empleado_id')
+
+        if solicitud.tipo_permiso == 'parcial' and not cobertura_id:
+            return render_template(
+                'solicitud_modificar.html',
+                solicitud=solicitud,
+                nombre=session['nombre'],
+                cobertura_opciones=cobertura_opciones,
+                error_cobertura='Debes seleccionar un reemplazo para un permiso parcial.'
+            )
+
+        if solicitud.tipo_permiso == 'parcial':
+            solicitud.cobertura_empleado_id = int(cobertura_id)
+            empleado = Empleado.query.get(solicitud.empleado_id)
+            if empleado and empleado.farmacia_id:
+                nueva_asig = AsignacionTemporal(
+                    empleado_id=int(cobertura_id),
+                    farmacia_destino_id=empleado.farmacia_id,
+                    fecha=solicitud.fecha
+                )
+                db.session.add(nueva_asig)
+
         solicitud.estado = 'Modificada (Aprobada)' # Cuenta como aprobada pero con cambios
         db.session.commit()
         return redirect(url_for('admin_solicitudes'))
         
-    return render_template('solicitud_modificar.html', solicitud=solicitud, nombre=session['nombre'])
+    return render_template(
+        'solicitud_modificar.html',
+        solicitud=solicitud,
+        nombre=session['nombre'],
+        cobertura_opciones=cobertura_opciones,
+        error_cobertura=None
+    )
 
 @app.route('/empleado')
 def empleado_dashboard():
@@ -430,6 +470,8 @@ def construir_estado_empleado(empleado_id):
             if dia_semana not in mi_horario or mi_horario[dia_semana] == 'Descanso':
                 if perm.mensaje_admin == 'Registro Administrativo Directo':
                     mi_horario[dia_semana] = 'Suspensión'
+                elif perm.tipo_permiso == 'parcial' and perm.hora_retorno:
+                    mi_horario[dia_semana] = f"Permiso parcial hasta {perm.hora_retorno}"
                 else:
                     mi_horario[dia_semana] = 'Permiso Aprobado'
         except Exception as e:
@@ -514,6 +556,13 @@ def empleado_horario_json():
                     'fecha': fecha_iso,
                     'sucursal': 'Suspensión',
                     'horario': '-'
+                })
+            elif permiso.tipo_permiso == 'parcial' and permiso.hora_retorno:
+                resultado.append({
+                    'dia': dias_nombre[i],
+                    'fecha': fecha_iso,
+                    'sucursal': 'Permiso parcial',
+                    'horario': f"Entra {permiso.hora_retorno}"
                 })
             else:
                 resultado.append({
@@ -1143,16 +1192,23 @@ def nueva_solicitud_empleado():
 
     fecha = request.form.get('fecha')
     motivo = request.form.get('motivo')
+    tipo_permiso = request.form.get('tipo_permiso', 'dia_completo')
+    hora_retorno = request.form.get('hora_retorno', '').strip()
 
     if not fecha or not motivo:
         return jsonify({'status': 'error', 'mensaje': 'Debes completar la fecha y el motivo.'}), 400
+
+    if tipo_permiso == 'parcial' and not hora_retorno:
+        return jsonify({'status': 'error', 'mensaje': 'Debes indicar la hora de entrada.'}), 400
 
     nueva = Solicitud(
         empleado_id=session['user_id'],
         fecha=fecha,
         motivo=motivo,
         estado='Pendiente',
-        mensaje_admin=''
+        mensaje_admin='',
+        tipo_permiso=tipo_permiso,
+        hora_retorno=hora_retorno if tipo_permiso == 'parcial' else None
     )
 
     db.session.add(nueva)
@@ -1174,7 +1230,9 @@ def empleado_solicitudes_json():
             'fecha': s.fecha,
             'motivo': s.motivo,
             'estado': s.estado,
-            'mensaje_admin': s.mensaje_admin or ''
+            'mensaje_admin': s.mensaje_admin or '',
+            'tipo_permiso': s.tipo_permiso or 'dia_completo',
+            'hora_retorno': s.hora_retorno or ''
         })
 
     return jsonify({'status': 'ok', 'solicitudes': payload})
@@ -1305,9 +1363,34 @@ def asegurar_columnas_empleado():
         for sentencia in sentencias:
             conn.execute(text(sentencia))
 
+
+def asegurar_columnas_solicitud():
+    inspector = inspect(db.engine)
+    tablas = inspector.get_table_names()
+    if 'solicitud' not in tablas:
+        return
+
+    columnas = {col['name'] for col in inspector.get_columns('solicitud')}
+    sentencias = []
+
+    if 'tipo_permiso' not in columnas:
+        sentencias.append("ALTER TABLE solicitud ADD COLUMN tipo_permiso VARCHAR(20) DEFAULT 'dia_completo'")
+    if 'hora_retorno' not in columnas:
+        sentencias.append("ALTER TABLE solicitud ADD COLUMN hora_retorno VARCHAR(10)")
+    if 'cobertura_empleado_id' not in columnas:
+        sentencias.append("ALTER TABLE solicitud ADD COLUMN cobertura_empleado_id INTEGER")
+
+    if not sentencias:
+        return
+
+    with db.engine.begin() as conn:
+        for sentencia in sentencias:
+            conn.execute(text(sentencia))
+
 with app.app_context():
     db.create_all()
     asegurar_columnas_empleado()
+    asegurar_columnas_solicitud()
     seed_data()
 
 if __name__ == '__main__':

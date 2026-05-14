@@ -45,6 +45,17 @@
                 <input type="date" name="fecha" required>
                 <label>Motivo:</label>
                 <input type="text" name="motivo" placeholder="Ej. Cita médica, Asunto personal..." required>
+                <div style="margin-top: 10px;">
+                    <label style="font-size: 13px; font-weight: 600;">Tipo de permiso:</label>
+                    <div style="display:flex; gap:12px; margin-top:6px;">
+                        <label style="font-size:12px;"><input type="radio" name="tipo_permiso" value="dia_completo" checked> Día completo</label>
+                        <label style="font-size:12px;"><input type="radio" name="tipo_permiso" value="parcial"> Permiso parcial</label>
+                    </div>
+                </div>
+                <div id="permiso-parcial" style="display:none; margin-top:10px;">
+                    <label>Hora de entrada (regreso al trabajo):</label>
+                    <input type="time" name="hora_retorno" id="hora_retorno">
+                </div>
                 <button type="submit">Enviar Solicitud</button>
             </form>
             <div id="solicitud-mensaje" style="margin-top: 10px; font-size: 12px;"></div>
@@ -54,13 +65,20 @@
             <h3 style="margin-top:0;">Estado de mis solicitudes</h3>
             <table>
                 <thead>
-                    <tr><th>Fecha</th><th>Motivo</th><th>Estado</th><th>Respuesta Admin</th><th>Acción</th></tr>
+                    <tr><th>Fecha</th><th>Motivo</th><th>Tipo</th><th>Estado</th><th>Respuesta Admin</th><th>Acción</th></tr>
                 </thead>
                 <tbody id="solicitudes-body">
                     {% for s in solicitudes %}
                     <tr>
                         <td>{{ s.fecha }}</td>
                         <td>{{ s.motivo }}</td>
+                        <td>
+                            {% if s.tipo_permiso == 'parcial' %}
+                                Parcial (entra {{ s.hora_retorno }})
+                            {% else %}
+                                Día completo
+                            {% endif %}
+                        </td>
                         <td class="{% if 'Aprobada' in s.estado %}estado-aprobada{% elif s.estado=='Rechazada' or s.estado=='Cancelada' %}estado-rechazada{% elif s.estado=='Pide Cancelación' %}estado-pide-cancelacion{% else %}estado-pendiente{% endif %}">{{ s.estado }}</td>
                         <td style="font-size:12px; color:#666;">{{ s.mensaje_admin if s.mensaje_admin else '-' }}</td>
                         <td>
@@ -117,10 +135,13 @@
                     accion = '<span style="font-size: 11px; color: #999;">-</span>';
                 }
 
+                const tipoPermiso = s.tipo_permiso === 'parcial' ? `Parcial (entra ${s.hora_retorno || '-'})` : 'Día completo';
+
                 html += `
                     <tr>
                         <td>${s.fecha}</td>
                         <td>${s.motivo}</td>
+                        <td>${tipoPermiso}</td>
                         <td class="${clase}">${s.estado}</td>
                         <td style="font-size:12px; color:#666;">${mensaje}</td>
                         <td>${accion}</td>
@@ -187,6 +208,29 @@
                 }
             });
         }
+
+        const permisoRadios = document.querySelectorAll('input[name="tipo_permiso"]');
+        const bloqueParcial = document.getElementById('permiso-parcial');
+        const horaRetorno = document.getElementById('hora_retorno');
+
+        function actualizarTipoPermiso() {
+            const seleccionado = document.querySelector('input[name="tipo_permiso"]:checked');
+            if (!seleccionado) {
+                return;
+            }
+            const esParcial = seleccionado.value === 'parcial';
+            if (bloqueParcial) {
+                bloqueParcial.style.display = esParcial ? 'block' : 'none';
+            }
+            if (horaRetorno) {
+                horaRetorno.required = esParcial;
+            }
+        }
+
+        permisoRadios.forEach((radio) => {
+            radio.addEventListener('change', actualizarTipoPermiso);
+        });
+        actualizarTipoPermiso();
 
         setInterval(refrescarSolicitudes, 15000);
     </script>

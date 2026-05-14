@@ -73,6 +73,7 @@
                         <th>EMPLEADO</th>
                         <th>FECHA SOLICITADA</th>
                         <th>MOTIVO</th>
+                        <th>TIPO</th>
                         <th>ESTADO</th>
                         <th>ACCIÓN</th>
                     </tr>
@@ -83,6 +84,13 @@
                         <td>{{ s.empleado.nombre }}</td>
                         <td><b>{{ s.fecha }}</b></td>
                         <td>{{ s.motivo }}<br><i style="font-size:11px; color:#666;">{{ s.mensaje_admin }}</i></td>
+                        <td>
+                            {% if s.tipo_permiso == 'parcial' %}
+                                Parcial (entra {{ s.hora_retorno }}){% if s.cobertura_empleado %}<br><i style="font-size:11px; color:#666;">Reemplazo: {{ s.cobertura_empleado.nombre }}</i>{% endif %}
+                            {% else %}
+                                Día completo
+                            {% endif %}
+                        </td>
                         <td><b>{{ s.estado }}</b></td>
                         <td>
                             <div class="action-container">
@@ -198,12 +206,20 @@
                 }
 
                 const mensaje = s.mensaje_admin ? `<br><i style="font-size:11px; color:#666;">${s.mensaje_admin}</i>` : '';
+                let tipo = 'Día completo';
+                if (s.tipo_permiso === 'parcial') {
+                    tipo = `Parcial (entra ${s.hora_retorno || '-'})`;
+                    if (s.cobertura_empleado) {
+                        tipo += `<br><i style="font-size:11px; color:#666;">Reemplazo: ${s.cobertura_empleado}</i>`;
+                    }
+                }
 
                 html += `
                     <tr>
                         <td>${s.empleado}</td>
                         <td><b>${s.fecha}</b></td>
                         <td>${s.motivo}${mensaje}</td>
+                        <td>${tipo}</td>
                         <td><b>${s.estado}</b></td>
                         <td><div class="action-container">${acciones}</div></td>
                     </tr>

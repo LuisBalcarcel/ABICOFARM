@@ -74,6 +74,15 @@
                                 <td style="color: #b0bec5; font-weight: bold; font-style: italic;">Permiso Aprobado</td>
                                 <td style="color: #b0bec5; font-style: italic;">-</td>
                             </tr>
+                            {% elif 'Permiso parcial' in turno %}
+                            <tr data-dia-index="{{ i }}">
+                                <td>
+                                    <b>{{ dias_semana[i] }}</b><br>
+                                    <span style="font-size:11px; color:#999;">{{ fechas_semana[i] }}</span>
+                                </td>
+                                <td style="color: #b0bec5; font-weight: bold; font-style: italic;">Permiso parcial</td>
+                                <td style="color: #b0bec5; font-style: italic;">{{ turno.replace('Permiso parcial hasta ', 'Entra ') }}</td>
+                            </tr>
                             {% elif turno == 'Suspensión' %}
                             <tr data-dia-index="{{ i }}" style="background-color: #ffebee;">
                                 <td>
@@ -125,6 +134,17 @@
                     </td>
                     <td style="color: #b0bec5; font-weight: bold; font-style: italic;">Permiso Aprobado</td>
                     <td style="color: #b0bec5; font-style: italic;">-</td>
+                `;
+            }
+
+            if (item.sucursal === 'Permiso parcial') {
+                return `
+                    <td>
+                        <b>${item.dia}</b><br>
+                        <span style="font-size:11px; color:#999;">${fechaVisible}</span>
+                    </td>
+                    <td style="color: #b0bec5; font-weight: bold; font-style: italic;">Permiso parcial</td>
+                    <td style="color: #b0bec5; font-style: italic;">${item.horario || '-'}</td>
                 `;
             }
 

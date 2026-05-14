@@ -23,6 +23,9 @@
         <div class="info-box">
             <b>Fecha original solicitada:</b> {{ solicitud.fecha }}<br>
             <b>Motivo:</b> {{ solicitud.motivo }}
+            {% if solicitud.tipo_permiso == 'parcial' %}<br>
+            <b>Tipo de permiso:</b> Parcial (entra {{ solicitud.hora_retorno }})
+            {% endif %}
         </div>
         
         <form method="POST">
@@ -35,6 +38,21 @@
                 <label>Mensaje / Razón del cambio (Lo verá el empleado):</label>
                 <input type="text" name="mensaje" placeholder="Ej. El 23 no puedo, te doy el 24." required>
             </div>
+
+            {% if solicitud.tipo_permiso == 'parcial' %}
+            <div class="form-group">
+                <label>Reemplazo (obligatorio para permiso parcial):</label>
+                <select name="cobertura_empleado_id" required>
+                    <option value="">Selecciona un reemplazo</option>
+                    {% for e in cobertura_opciones %}
+                    <option value="{{ e.id }}" {% if solicitud.cobertura_empleado_id == e.id %}selected{% endif %}>{{ e.nombre }} ({{ e.rol }})</option>
+                    {% endfor %}
+                </select>
+                {% if error_cobertura %}
+                <div style="margin-top:6px; color:#c62828; font-size:12px; font-weight:600;">{{ error_cobertura }}</div>
+                {% endif %}
+            </div>
+            {% endif %}
 
             <button type="submit" class="btn">Aprobar con Modificación</button>
             <a href="{{ url_for('admin_solicitudes') }}" class="btn-cancel">Cancelar</a>
