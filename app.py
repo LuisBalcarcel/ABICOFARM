@@ -70,7 +70,7 @@ class Solicitud(db.Model):
     hora_retorno = db.Column(db.String(10), nullable=True)
     cobertura_empleado_id = db.Column(db.Integer, db.ForeignKey('empleado.id'), nullable=True)
     
-    empleado = db.relationship('Empleado')
+    empleado = db.relationship('Empleado', foreign_keys=[empleado_id])
     cobertura_empleado = db.relationship('Empleado', foreign_keys=[cobertura_empleado_id])
 
 class AsignacionTemporal(db.Model):
