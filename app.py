@@ -1027,11 +1027,16 @@ def ejecutar_ia():
         except KeyError as e:
             print(f"[ERROR KeyError] Clave faltante en diccionario: {e}")
             print(f"[ERROR] Primer empleado recibido: {empleados_data[0] if empleados_data else 'LISTA VACÍA'}")
-            return jsonify({"status": "error",
-                            "mensaje": f"Error en datos de empleado: clave {e} no encontrada"})
+            flash(
+                "Error al optimizar: datos de permisos o asignaciones no coinciden con los empleados "
+                f"incluidos en el motor (referencia {e}). Revisa empleados sin horario completo o sucursales eliminadas.",
+                "error",
+            )
+            return redirect(url_for("ver_horarios_ia"))
         except Exception as e:
             print(f"[ERROR General] {type(e).__name__}: {e}")
-            return jsonify({"status": "error", "mensaje": f"Error interno: {str(e)}"})
+            flash(f"Error interno al ejecutar el motor: {str(e)}", "error")
+            return redirect(url_for("ver_horarios_ia"))
 
         if resultados is not None:
             HorarioGenerado.query.delete()

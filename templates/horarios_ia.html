@@ -36,8 +36,8 @@
         th { color: #a0aec0; padding: 10px 15px; font-size: 12px; text-transform: uppercase; text-align: center; }
         td { padding: 12px 15px; border-bottom: 1px solid #eee; font-size: 14px; font-weight: 600; text-align: center; }
         
-        .fila-descanso { background-color: #f8f9fa; }
-        .fila-descanso td { color: #90a4ae; font-weight: normal; }
+        .fila-descanso { background-color: #f1f5f9; }
+        .fila-descanso td { color: #455a64; font-weight: 500; }
         
         .alert { background-color: #e0f2f1; border-left: 4px solid #00bcd4; padding: 15px; margin-bottom: 20px; color: #008ba3; font-weight: bold; }
     </style>
@@ -114,8 +114,8 @@
                             {% if turno == 'Permiso Aprobado' %}
                             <tr class="fila-descanso">
                                 <td>{{ dias_semana[i] }}</td>
-                                <td style="color: #b0bec5; font-weight: bold; font-style: italic;">Permiso Aprobado</td>
-                                <td style="color: #b0bec5; font-style: italic;">-</td>
+                                <td style="color: #455a64; font-weight: bold; font-style: italic;">Permiso Aprobado</td>
+                                <td style="color: #455a64; font-style: italic;">-</td>
                             </tr>
                             {% elif turno == 'Suspensión' %}
                             <tr style="background-color: #ffebee;">

@@ -6,6 +6,26 @@ def generar_horario_semana(empleados, farmacias, dias=7, ausencias=None, forzada
     if forzadas is None:
         forzadas = []
 
+    # Solo modelamos variables para empleados/farmacias presentes en las listas.
+    # Ausencias y asignaciones forzadas pueden referir a empleados excluidos del motor
+    # (p. ej. sin horario definido) o farmacias eliminadas; ignorarlas evita KeyError.
+    valid_e_ids = {e['id'] for e in empleados}
+    valid_f_ids = {f['id'] for f in farmacias}
+
+    def _dia_ok(d):
+        return isinstance(d, int) and 0 <= d < dias
+
+    ausencias = [
+        a for a in ausencias
+        if a.get('empleado_id') in valid_e_ids and _dia_ok(a.get('dia'))
+    ]
+    forzadas = [
+        o for o in forzadas
+        if o.get('empleado_id') in valid_e_ids
+        and o.get('farmacia_dest_id') in valid_f_ids
+        and _dia_ok(o.get('dia'))
+    ]
+
     model = cp_model.CpModel()
     farmacias_domingo = ["San josé Parque", "Amatitlan", "Alioto"]
 
@@ -84,8 +104,9 @@ def generar_horario_semana(empleados, farmacias, dias=7, ausencias=None, forzada
     # Extraemos dónde y cuándo faltará alguien (los huecos a cubrir)
     huecos_aprobados = []
     for a in ausencias:
-        if a.get('farmacia_id') is not None:
-            huecos_aprobados.append((a['farmacia_id'], a['dia']))
+        fid = a.get('farmacia_id')
+        if fid is not None and fid in valid_f_ids:
+            huecos_aprobados.append((fid, a['dia']))
 
     for e in empleados:
         if e['rol'] == 'Comodin':
@@ -132,8 +153,8 @@ def generar_horario_semana(empleados, farmacias, dias=7, ausencias=None, forzada
     # R8: Descanso fijo programado (Ej. Universidad o Religión)
     # Cumplimiento Art. 126 Código de Trabajo Guatemala - Descanso semanal obligatorio
     for e in empleados:
-        if e.get('dia_descanso_fijo') is not None:
-            d_fijo = e['dia_descanso_fijo']
+        d_fijo = e.get('dia_descanso_fijo')
+        if d_fijo is not None and _dia_ok(d_fijo):
             for f in farmacias:
                 # El modelo fuerza a que el turno en ese día específico sea 0
                 model.Add(shifts[(e['id'], f['id'], d_fijo)] == 0)
