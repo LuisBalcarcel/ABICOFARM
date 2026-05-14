@@ -866,18 +866,31 @@ def ejecutar_ia():
             Empleado.rol != 'Desarrollador'
         ).all():
             # Verificar que tenga los datos mínimos necesarios
-            if not e.horario_variable and (e.hora_entrada is None or e.hora_salida is None):
+            horario_variable = bool(getattr(e, 'horario_variable', False)) or e.horario == 'SE AJUSTA A LA NECESIDAD'
+            hora_entrada = getattr(e, 'hora_entrada', None)
+            hora_salida = getattr(e, 'hora_salida', None)
+            if (hora_entrada is None or hora_salida is None) and e.horario and ' - ' in e.horario:
+                partes = e.horario.split(' - ')
+                if len(partes) == 2:
+                    hora_entrada = partes[0].strip()
+                    hora_salida = partes[1].strip()
+
+            if not horario_variable and (not hora_entrada or not hora_salida):
                 continue  # Saltar empleados sin horario definido
+
+            dia_descanso = getattr(e, 'dia_descanso', None)
+            if dia_descanso in [None, 'Ninguno', 'Rotativo', 'ninguno', '']:
+                dia_descanso = e.dia_descanso_fijo
+                if dia_descanso is None and e.id in descanso_rotativo:
+                    dia_descanso = descanso_rotativo[e.id]
 
             empleados_data.append({
                 'id': e.id,
                 'nombre': e.nombre,           # ← clave exacta que usa OR-Tools
                 'rol': e.rol,
                 'farmacia_id': e.farmacia_id,
-                'horario_variable': e.horario_variable or False,
-                'dia_descanso_fijo': e.dia_descanso if e.dia_descanso not in
-                                     [None, 'Ninguno', 'Rotativo', 'ninguno', '']
-                                     else None
+                'horario_variable': horario_variable,
+                'dia_descanso_fijo': dia_descanso
             })
 
         ausencias_lista = []
