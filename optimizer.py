@@ -26,7 +26,9 @@ def generar_horario_semana(empleados, farmacias, dias=7, ausencias=None, forzada
     for e in empleados:
         total_dias = sum(shifts[(e['id'], f['id'], d)] for f in farmacias for d in range(dias))
         model.Add(total_dias <= 6)
-        model.Add(total_dias >= 1)
+        # El >= 1 se maneja solo por el objetivo Maximize,
+        # no es una restricción dura porque puede haber semanas
+        # donde el empleado tenga permiso toda la semana.
 
     # R3: Permisos Aprobados (El empleado que pidió permiso NO trabaja ese día)
     for aus in ausencias:
@@ -60,7 +62,15 @@ def generar_horario_semana(empleados, farmacias, dias=7, ausencias=None, forzada
                             if d == 6 and f.get('nombre') not in farmacias_domingo:
                                 model.Add(shifts[(e['id'], f['id'], d)] == 0) # El domingo pesa más
                             else:
-                                model.Add(shifts[(e['id'], f['id'], d)] == 1)
+                                tiene_ausencia = any(
+                                    a['empleado_id'] == e['id'] and a['dia'] == d
+                                    for a in ausencias
+                                )
+                                if not tiene_ausencia:
+                                    model.Add(shifts[(e['id'], f['id'], d)] == 1)
+                                else:
+                                    # Si hay ausencia, respetar R3 y no forzar
+                                    model.Add(shifts[(e['id'], f['id'], d)] == 0)
                         else:
                             model.Add(shifts[(e['id'], f['id'], d)] == 0)
                 else:
@@ -95,13 +105,22 @@ def generar_horario_semana(empleados, farmacias, dias=7, ausencias=None, forzada
                             if d == 6 and f.get('nombre') not in farmacias_domingo:
                                 model.Add(shifts[(e['id'], f['id'], d)] == 0)
                             else:
-                                model.Add(shifts[(e['id'], f['id'], d)] == 1)
+                                tiene_ausencia_comodin = any(
+                                    a['empleado_id'] == e['id'] and a['dia'] == d
+                                    for a in ausencias
+                                )
+                                if not tiene_ausencia_comodin:
+                                    model.Add(shifts[(e['id'], f['id'], d)] == 1)
+                                else:
+                                    model.Add(shifts[(e['id'], f['id'], d)] == 0)
                         else:
                             model.Add(shifts[(e['id'], f['id'], d)] == 0)
                     else:
                         # Si NO hay orden del admin, el comodín SOLO puede cubrir permisos médicos/personales
-                        if (f['id'], d) not in huecos_aprobados:
-                            model.Add(shifts[(e['id'], f['id'], d)] == 0)
+                        # No agregar restricción == 0 cuando no hay huecos.
+                        # Solo bloquear si hay huecos en OTRAS farmacias ese día
+                        # (para que no cubra dos lugares a la vez, ya lo controla R1).
+                        pass
 
     # R7: Máximo 1 comodín por hueco (Para no mandar a todos a cubrir el mismo lugar)
     # Solo aplica para los comodines sin órdenes forzadas.
@@ -133,6 +152,15 @@ def generar_horario_semana(empleados, farmacias, dias=7, ausencias=None, forzada
     # Ejecutar Solver
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = 5.0
+
+    print(f"[OR-Tools] Empleados: {len(empleados)}")
+    print(f"[OR-Tools] Ausencias: {ausencias}")
+    print(f"[OR-Tools] Forzadas: {forzadas}")
+    print(f"[OR-Tools] Huecos aprobados: {huecos_aprobados}")
+    for e in empleados:
+        dias_bloqueados = [a['dia'] for a in ausencias if a['empleado_id'] == e['id']]
+        descanso = e.get('dia_descanso_fijo')
+        print(f"  {e['nombre']} | descanso_fijo={descanso} | ausencias={dias_bloqueados}")
 
     status = solver.Solve(model)
     print("STATUS OR-TOOLS:", status) # Esto te ayudará en la consola
