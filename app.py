@@ -56,7 +56,7 @@ class HorarioGenerado(db.Model):
     empleado_id = db.Column(db.Integer, db.ForeignKey('empleado.id'))
     farmacia_id = db.Column(db.Integer, db.ForeignKey('farmacia.id'))
     
-    empleado = db.relationship('Empleado')
+    empleado = db.relationship('Empleado', foreign_keys=[empleado_id])
     farmacia = db.relationship('Farmacia')
 
 class Solicitud(db.Model):
