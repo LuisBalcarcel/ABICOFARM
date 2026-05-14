@@ -13,6 +13,19 @@ DATABASE_URL = os.environ.get('DATABASE_URL')
 if not DATABASE_URL:
     DATABASE_URL = 'sqlite:///instance/abicofarm.db'
 
+# Carpeta para SQLite relativo (evita "unable to open database file" al ejecutar python app.py)
+if DATABASE_URL.startswith('sqlite:') and ':memory:' not in DATABASE_URL:
+    rest = DATABASE_URL
+    for prefix in ('sqlite:///', 'sqlite:////'):
+        if rest.startswith(prefix):
+            rest = rest[len(prefix) :]
+            break
+    if rest and not rest.startswith(':'):
+        db_path = os.path.abspath(rest)
+        db_dir = os.path.dirname(db_path)
+        if db_dir:
+            os.makedirs(db_dir, exist_ok=True)
+
 # Render a veces entrega la URL con 'postgres://', SQLAlchemy necesita 'postgresql://'
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
