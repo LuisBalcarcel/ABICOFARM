@@ -612,17 +612,54 @@ def dev_reset_password(id):
 
 @app.route('/dev/forzar-logout/<int:id>', methods=['POST'])
 def dev_forzar_logout(id):
-    if not acceso_dev():
-        return jsonify({'status': 'error', 'mensaje': 'unauthorized'}), 401
+    if session.get('rol') != 'Desarrollador':
+        return jsonify({"status": "error", "mensaje": "No autorizado"}), 403
 
-    empleado = Empleado.query.get(id)
-    if not empleado:
-        return jsonify({'status': 'error', 'mensaje': 'Usuario no encontrado'}), 404
+    empleado = Empleado.query.get_or_404(id)
 
     empleado.forzar_logout = True
     empleado.activo_ahora = False
     db.session.commit()
-    return jsonify({'status': 'ok', 'mensaje': f'Sesión de {empleado.nombre} será cerrada en su próxima acción'})
+    return jsonify({
+        "status": "ok",
+        "mensaje": f"Sesión de {empleado.nombre} será cerrada en su próxima acción"
+    })
+
+
+@app.route('/dev/crear-admin', methods=['GET', 'POST'])
+def dev_crear_admin():
+    if session.get('rol') != 'Desarrollador':
+        return jsonify({"status": "error", "mensaje": "No autorizado"}), 403
+
+    if request.method == 'GET':
+        empleados = Empleado.query.all()
+        return render_template('dev_panel.html', empleados=empleados)
+
+    data = request.get_json(silent=True) or {}
+    nombre = data.get('nombre', '').strip()
+    username = data.get('username', '').strip()
+    password = data.get('password', '').strip()
+
+    if not nombre or not username or not password:
+        return jsonify({"status": "error", "mensaje": "Todos los campos son obligatorios"}), 400
+
+    if Empleado.query.filter_by(username=username).first():
+        return jsonify({"status": "error", "mensaje": "El usuario ya existe"}), 400
+
+    nuevo_admin = Empleado(
+        nombre=nombre,
+        rol='Admin',
+        horario='SE AJUSTA A LA NECESIDAD',
+        farmacia_id=None,
+        username=username,
+        password=generate_password_hash(password)
+    )
+    if hasattr(nuevo_admin, 'horario_variable'):
+        nuevo_admin.horario_variable = True
+
+    db.session.add(nuevo_admin)
+    db.session.commit()
+    return jsonify({"status": "ok", "mensaje": f"Admin {nombre} creado exitosamente"})
 
 # --- CRUD DE EMPLEADOS ---
 @app.route('/admin/empleado/nuevo', methods=['GET', 'POST'])

@@ -57,6 +57,38 @@
             </table>
         </div>
 
+        <div style="background:#161b22; border:1px solid #30363d; 
+                    border-radius:8px; padding:20px; margin-bottom:20px;">
+            <h3 style="color:#FF6B00; margin-top:0;">➕ Crear Administrador</h3>
+            <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
+                <div>
+                    <label style="color:#8b949e; font-size:12px;">Nombre Completo</label><br>
+                    <input type="text" id="admin_nombre" placeholder="Ej: Susana" 
+                           style="background:#0d1117; color:white; border:1px solid #30363d; 
+                                  padding:8px 12px; border-radius:4px;">
+                </div>
+                <div>
+                    <label style="color:#8b949e; font-size:12px;">Usuario</label><br>
+                    <input type="text" id="admin_username" placeholder="Ej: susana" 
+                           style="background:#0d1117; color:white; border:1px solid #30363d; 
+                                  padding:8px 12px; border-radius:4px;">
+                </div>
+                <div>
+                    <label style="color:#8b949e; font-size:12px;">Contraseña</label><br>
+                    <input type="password" id="admin_password" placeholder="Contraseña inicial" 
+                           style="background:#0d1117; color:white; border:1px solid #30363d; 
+                                  padding:8px 12px; border-radius:4px;">
+                </div>
+                <button onclick="crearAdmin()" 
+                        style="background:#FF6B00; color:white; border:none; 
+                               padding:9px 18px; border-radius:4px; cursor:pointer;
+                               font-weight:bold;">
+                    ➕ Crear Admin
+                </button>
+            </div>
+            <div id="admin_msg" style="margin-top:10px;"></div>
+        </div>
+
         <div class="card">
             <h2>👥 Todos los Usuarios</h2>
             <table>
@@ -153,18 +185,56 @@
         }
 
         function forzarLogout(id, nombre) {
-            if (!confirm(`¿Cerrar sesión de ${nombre}?`)) return;
-
-            fetch(`/dev/forzar-logout/${id}`, {
+            if (!confirm('¿Cerrar sesión de ' + nombre + '?')) return;
+            
+            fetch('/dev/forzar-logout/' + id, {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
                 body: JSON.stringify({})
             })
-            .then(r => r.json())
-            .then(data => {
+            .then(function(response) { return response.json(); })
+            .then(function(data) {
                 if (data.status === 'ok') {
-                    mostrarToast(`⏏ ${data.mensaje}`, 'warning');
-                    setTimeout(() => location.reload(), 1500);
+                    alert('✅ ' + data.mensaje);
+                    location.reload();
+                } else {
+                    alert('❌ Error: ' + data.mensaje);
+                }
+            })
+            .catch(function(err) {
+                alert('❌ Error de conexión: ' + err);
+            });
+        }
+
+        function crearAdmin() {
+            var nombre = document.getElementById('admin_nombre').value.trim();
+            var username = document.getElementById('admin_username').value.trim();
+            var password = document.getElementById('admin_password').value.trim();
+            var msg = document.getElementById('admin_msg');
+            
+            if (!nombre || !username || !password) {
+                msg.innerHTML = '<span style="color:#ff6b6b;">⚠️ Todos los campos son obligatorios</span>';
+                return;
+            }
+            
+            fetch('/dev/crear-admin', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({nombre: nombre, username: username, password: password})
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.status === 'ok') {
+                    msg.innerHTML = '<span style="color:#3fb950;">✅ ' + data.mensaje + '</span>';
+                    document.getElementById('admin_nombre').value = '';
+                    document.getElementById('admin_username').value = '';
+                    document.getElementById('admin_password').value = '';
+                    setTimeout(function() { location.reload(); }, 1500);
+                } else {
+                    msg.innerHTML = '<span style="color:#ff6b6b;">❌ ' + data.mensaje + '</span>';
                 }
             });
         }
