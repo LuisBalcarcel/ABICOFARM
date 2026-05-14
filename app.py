@@ -830,8 +830,6 @@ def ejecutar_ia():
         empleados_db = Empleado.query.filter(Empleado.rol != 'Admin').all()
         farmacias_db = Farmacia.query.all()
 
-        farm_list = [{'id': f.id, 'nombre': f.nombre} for f in farmacias_db]
-
         # AUSENCIAS APROBADAS
         aprobadas = Solicitud.query.filter(
             Solicitud.estado.in_(['Aprobada', 'Modificada (Aprobada)'])
@@ -861,16 +859,25 @@ def ejecutar_ia():
                     descanso_rotativo[e.id] = d
                     break
 
-        emp_list = []
-        for e in empleados_db:
-            dia_descanso = e.dia_descanso_fijo
-            if dia_descanso is None and e.id in descanso_rotativo:
-                dia_descanso = descanso_rotativo[e.id]
-            emp_list.append({
+        empleados_data = []
+        for e in Empleado.query.filter(
+            Empleado.rol.in_(['Dependiente', 'Comodin']),
+            Empleado.rol != 'Administrador',
+            Empleado.rol != 'Desarrollador'
+        ).all():
+            # Verificar que tenga los datos mínimos necesarios
+            if not e.horario_variable and (e.hora_entrada is None or e.hora_salida is None):
+                continue  # Saltar empleados sin horario definido
+
+            empleados_data.append({
                 'id': e.id,
+                'nombre': e.nombre,           # ← clave exacta que usa OR-Tools
                 'rol': e.rol,
                 'farmacia_id': e.farmacia_id,
-                'dia_descanso_fijo': dia_descanso
+                'horario_variable': e.horario_variable or False,
+                'dia_descanso_fijo': e.dia_descanso if e.dia_descanso not in
+                                     [None, 'Ninguno', 'Rotativo', 'ninguno', '']
+                                     else None
             })
 
         ausencias_lista = []
@@ -904,13 +911,28 @@ def ejecutar_ia():
         except Exception as e:
             print("Aviso: No se pudieron procesar las asignaciones forzadas:", e)
 
-        resultados = generar_horario_semana(
-            emp_list,
-            farm_list,
-            dias=7,
-            ausencias=ausencias_lista,
-            forzadas=asignaciones_forzadas
-        )
+        farmacias_data = []
+        for f in Farmacia.query.all():
+            farmacias_data.append({
+                'id': f.id,
+                'nombre': f.nombre      # ← clave exacta
+            })
+
+        try:
+            resultados = generar_horario_semana(
+                empleados_data,
+                farmacias_data,
+                ausencias=ausencias_lista,
+                forzadas=asignaciones_forzadas
+            )
+        except KeyError as e:
+            print(f"[ERROR KeyError] Clave faltante en diccionario: {e}")
+            print(f"[ERROR] Primer empleado recibido: {empleados_data[0] if empleados_data else 'LISTA VACÍA'}")
+            return jsonify({"status": "error",
+                            "mensaje": f"Error en datos de empleado: clave {e} no encontrada"})
+        except Exception as e:
+            print(f"[ERROR General] {type(e).__name__}: {e}")
+            return jsonify({"status": "error", "mensaje": f"Error interno: {str(e)}"})
 
         if resultados is not None:
             HorarioGenerado.query.delete()
