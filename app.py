@@ -69,9 +69,70 @@ class Solicitud(db.Model):
     tipo_permiso = db.Column(db.String(20), default='dia_completo', server_default='dia_completo')
     hora_retorno = db.Column(db.String(10), nullable=True)
     cobertura_empleado_id = db.Column(db.Integer, db.ForeignKey('empleado.id'), nullable=True)
-    
+    # permiso | cambio_descanso | cancelacion_falta
+    categoria = db.Column(db.String(32), default='permiso', server_default='permiso')
+    dia_descanso_solicitado = db.Column(db.Integer, nullable=True)  # 0=Lun .. 6=Dom (solo cambio_descanso)
+    estado_al_pedir_cancel = db.Column(db.String(50), nullable=True)
+    nota_empleado = db.Column(db.String(300), nullable=True)
+
     empleado = db.relationship('Empleado', foreign_keys=[empleado_id])
     cobertura_empleado = db.relationship('Empleado', foreign_keys=[cobertura_empleado_id])
+
+
+def categoria_solicitud(s):
+    c = getattr(s, 'categoria', None) or 'permiso'
+    c = str(c).strip()
+    return c if c else 'permiso'
+
+
+def solicitud_cuenta_como_ausencia_ia(s):
+    """Ausencias que bloquean turno al solicitante en OR-Tools (excluye cambio de descanso / impugnación)."""
+    if s.estado not in ('Aprobada', 'Modificada (Aprobada)'):
+        return False
+    if categoria_solicitud(s) in ('cambio_descanso', 'cancelacion_falta'):
+        return False
+    return True
+
+
+def _aplicar_cobertura_permiso_manual(solicitud):
+    """
+    Quita el turno generado al solicitante ese día y asigna al reemplazo en la misma sucursal,
+    además de registrar AsignacionTemporal para el motor OR-Tools.
+    """
+    try:
+        dt = datetime.strptime(solicitud.fecha, '%Y-%m-%d')
+        dia_semana = dt.weekday()
+    except Exception:
+        return False, 'Fecha inválida en la solicitud.'
+
+    if not solicitud.cobertura_empleado_id:
+        return False, 'Falta empleado de cobertura.'
+
+    turno = HorarioGenerado.query.filter_by(empleado_id=solicitud.empleado_id, dia=dia_semana).first()
+    farmacia_id = None
+    if turno:
+        farmacia_id = turno.farmacia_id
+        db.session.delete(turno)
+
+    emp = Empleado.query.get(solicitud.empleado_id)
+    if farmacia_id is None and emp and emp.farmacia_id:
+        farmacia_id = emp.farmacia_id
+
+    if farmacia_id is None:
+        return False, 'No se pudo determinar la sucursal a cubrir.'
+
+    cob_id = solicitud.cobertura_empleado_id
+    HorarioGenerado.query.filter_by(empleado_id=cob_id, dia=dia_semana).delete()
+    db.session.add(HorarioGenerado(dia=dia_semana, empleado_id=cob_id, farmacia_id=farmacia_id))
+
+    AsignacionTemporal.query.filter_by(empleado_id=cob_id, fecha=solicitud.fecha).delete()
+    db.session.add(AsignacionTemporal(
+        empleado_id=cob_id,
+        farmacia_destino_id=farmacia_id,
+        fecha=solicitud.fecha
+    ))
+    return True, None
+
 
 class AsignacionTemporal(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -209,7 +270,10 @@ def admin_solicitudes_estado():
             'mensaje_admin': s.mensaje_admin or '',
             'tipo_permiso': s.tipo_permiso or 'dia_completo',
             'hora_retorno': s.hora_retorno or '',
-            'cobertura_empleado': s.cobertura_empleado.nombre if s.cobertura_empleado else ''
+            'cobertura_empleado': s.cobertura_empleado.nombre if s.cobertura_empleado else '',
+            'categoria': categoria_solicitud(s),
+            'dia_descanso_solicitado': s.dia_descanso_solicitado,
+            'nota_empleado': (s.nota_empleado or ''),
         })
 
     return jsonify({'solicitudes': payload})
@@ -254,57 +318,75 @@ def registrar_ausencia_admin():
 
 @app.route('/admin/solicitudes/estado/<int:id>/<estado>')
 def cambiar_estado_solicitud(id, estado):
+    if 'user_id' not in session or session.get('rol') != 'Admin':
+        return redirect(url_for('login'))
+
     solicitud = Solicitud.query.get(id)
     if not solicitud or estado not in ['Aprobada', 'Rechazada']:
         return redirect(url_for('admin_solicitudes'))
 
-    if estado == 'Aprobada' and solicitud.tipo_permiso == 'parcial' and not solicitud.cobertura_empleado_id:
-        flash('Para aprobar un permiso parcial debes seleccionar un reemplazo.', 'error')
-        return redirect(url_for('modificar_solicitud', id=id))
+    cat = categoria_solicitud(solicitud)
 
-    # IA Auto-gestión: cambios del admin no requieren validación adicional
-    # El admin ES la autorización. Cualquier acción suya se ejecuta inmediatamente.
     if estado == 'Rechazada':
         solicitud.estado = estado
         db.session.commit()
         return redirect(url_for('admin_solicitudes'))
 
-    solicitud.estado = estado
+    # ---- Aprobar ----
+    if cat == 'permiso':
+        if not solicitud.cobertura_empleado_id:
+            flash('Para aprobar un permiso debes indicar primero un reemplazo (usa Modificar).', 'error')
+            return redirect(url_for('modificar_solicitud', id=id))
+        if solicitud.tipo_permiso == 'parcial' and not solicitud.hora_retorno:
+            flash('Permiso parcial sin hora de entrada: complétalo en Modificar.', 'error')
+            return redirect(url_for('modificar_solicitud', id=id))
 
-    try:
-        dt = datetime.strptime(solicitud.fecha, '%Y-%m-%d')
-        dia_semana = dt.weekday()
-    except Exception:
-        dia_semana = None
+        ok, err = _aplicar_cobertura_permiso_manual(solicitud)
+        if not ok:
+            db.session.rollback()
+            flash(err or 'No se pudo registrar la cobertura.', 'error')
+            return redirect(url_for('admin_solicitudes'))
 
-    turno = None
-    farmacia_id = None
-    if dia_semana is not None:
-        turno = HorarioGenerado.query.filter_by(empleado_id=solicitud.empleado_id, dia=dia_semana).first()
-        if turno:
-            farmacia_id = turno.farmacia_id
-            db.session.delete(turno)
+        solicitud.estado = 'Aprobada'
+        db.session.commit()
+        flash('Permiso aprobado con cobertura y asignación para la IA.', 'success')
+        return redirect(url_for('admin_solicitudes'))
 
-    if farmacia_id is not None and dia_semana is not None:
-        comodines = Empleado.query.filter_by(rol='Comodin').all()
-        comodin_disponible = None
-        for comodin in comodines:
-            if comodin.dia_descanso_fijo is not None and comodin.dia_descanso_fijo == dia_semana:
-                continue
-            ocupado = HorarioGenerado.query.filter_by(empleado_id=comodin.id, dia=dia_semana).first()
-            if not ocupado:
-                comodin_disponible = comodin
-                break
+    if cat == 'cambio_descanso':
+        d = solicitud.dia_descanso_solicitado
+        if d is None or d < 0 or d > 6:
+            flash('Solicitud de descanso incompleta.', 'error')
+            return redirect(url_for('admin_solicitudes'))
+        emp = Empleado.query.get(solicitud.empleado_id)
+        if not emp:
+            return redirect(url_for('admin_solicitudes'))
+        dias_txt = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
+        emp.dia_descanso_fijo = int(d)
+        solicitud.estado = 'Aprobada'
+        solicitud.mensaje_admin = f'Descanso fijo: {dias_txt[d]} (la IA lo respetará al regenerar).'
+        db.session.commit()
+        flash('Cambio de día de descanso aplicado. Ejecuta OR-Tools para actualizar la semana.', 'success')
+        return redirect(url_for('admin_solicitudes'))
 
-        if comodin_disponible:
-            reemplazo = HorarioGenerado(
-                dia=dia_semana,
-                empleado_id=comodin_disponible.id,
-                farmacia_id=farmacia_id
-            )
-            db.session.add(reemplazo)
+    if cat == 'cancelacion_falta':
+        sus = Solicitud.query.filter(
+            Solicitud.id != solicitud.id,
+            Solicitud.empleado_id == solicitud.empleado_id,
+            Solicitud.fecha == solicitud.fecha,
+            Solicitud.mensaje_admin == 'Registro Administrativo Directo',
+            Solicitud.estado.in_(['Aprobada', 'Modificada (Aprobada)']),
+        ).first()
+        if not sus:
+            flash('No hay falta administrativa activa para esa fecha.', 'error')
+            return redirect(url_for('admin_solicitudes'))
+        sus.estado = 'Cancelada'
+        solicitud.estado = 'Aprobada'
+        solicitud.mensaje_admin = 'Impugnación aceptada: falta administrativa anulada.'
+        db.session.commit()
+        flash('Falta administrativa anulada.', 'success')
+        return redirect(url_for('admin_solicitudes'))
 
-    db.session.commit()
+    flash('Esta categoría no se aprueba desde aquí.', 'error')
     return redirect(url_for('admin_solicitudes'))
 
 @app.route('/admin/solicitudes/modificar/<int:id>', methods=['GET', 'POST'])
@@ -313,31 +395,51 @@ def modificar_solicitud(id):
         return redirect(url_for('login'))
         
     solicitud = Solicitud.query.get(id)
+    if not solicitud:
+        return redirect(url_for('admin_solicitudes'))
+
+    if categoria_solicitud(solicitud) != 'permiso':
+        flash('Este tipo de solicitud se gestiona solo con Aprobar o Rechazar en la tabla.', 'info')
+        return redirect(url_for('admin_solicitudes'))
+
     cobertura_opciones = Empleado.query.filter(Empleado.rol.in_(['Dependiente', 'Comodin'])).all()
+    es_registro = solicitud.mensaje_admin == 'Registro Administrativo Directo'
+
     if request.method == 'POST':
         solicitud.fecha = request.form['nueva_fecha']
+        if es_registro:
+            nota = (request.form.get('mensaje') or '').strip()
+            if nota:
+                solicitud.mensaje_admin = 'Registro Administrativo Directo · ' + nota[:160]
+            db.session.commit()
+            return redirect(url_for('admin_solicitudes'))
+
         solicitud.mensaje_admin = request.form['mensaje']
         cobertura_id = request.form.get('cobertura_empleado_id')
 
-        if solicitud.tipo_permiso == 'parcial' and not cobertura_id:
-            return render_template(
-                'solicitud_modificar.html',
-                solicitud=solicitud,
-                nombre=session['nombre'],
-                cobertura_opciones=cobertura_opciones,
-                error_cobertura='Debes seleccionar un reemplazo para un permiso parcial.'
-            )
-
-        if solicitud.tipo_permiso == 'parcial':
-            solicitud.cobertura_empleado_id = int(cobertura_id)
-            empleado = Empleado.query.get(solicitud.empleado_id)
-            if empleado and empleado.farmacia_id:
-                nueva_asig = AsignacionTemporal(
-                    empleado_id=int(cobertura_id),
-                    farmacia_destino_id=empleado.farmacia_id,
-                    fecha=solicitud.fecha
+        if categoria_solicitud(solicitud) == 'permiso':
+            if not cobertura_id:
+                return render_template(
+                    'solicitud_modificar.html',
+                    solicitud=solicitud,
+                    nombre=session['nombre'],
+                    cobertura_opciones=cobertura_opciones,
+                    error_cobertura='Debes seleccionar un reemplazo (dependiente o comodín).',
+                    es_registro_admin=False,
                 )
-                db.session.add(nueva_asig)
+            solicitud.cobertura_empleado_id = int(cobertura_id)
+            ok, err = _aplicar_cobertura_permiso_manual(solicitud)
+            if not ok:
+                db.session.rollback()
+                solicitud = Solicitud.query.get(id)
+                return render_template(
+                    'solicitud_modificar.html',
+                    solicitud=solicitud,
+                    nombre=session['nombre'],
+                    cobertura_opciones=cobertura_opciones,
+                    error_cobertura=err or 'No se pudo aplicar la cobertura.',
+                    es_registro_admin=False,
+                )
 
         solicitud.estado = 'Modificada (Aprobada)' # Cuenta como aprobada pero con cambios
         db.session.commit()
@@ -348,7 +450,8 @@ def modificar_solicitud(id):
         solicitud=solicitud,
         nombre=session['nombre'],
         cobertura_opciones=cobertura_opciones,
-        error_cobertura=None
+        error_cobertura=None,
+        es_registro_admin=es_registro,
     )
 
 @app.route('/empleado')
@@ -462,6 +565,8 @@ def construir_estado_empleado(empleado_id):
 
     # Marcar los días de permisos o suspensiones en el horario
     for perm in permisos_aprobados:
+        if not solicitud_cuenta_como_ausencia_ia(perm):
+            continue
         try:
             dt = datetime.strptime(perm.fecha, '%Y-%m-%d')
             dia_semana = dt.weekday()
@@ -534,6 +639,7 @@ def empleado_horario_json():
         Solicitud.empleado_id == empleado_id,
         Solicitud.estado.in_(['Aprobada', 'Modificada (Aprobada)'])
     ).all()
+    aprobadas = [s for s in aprobadas if solicitud_cuenta_como_ausencia_ia(s)]
     aprobadas_por_fecha = {s.fecha: s for s in aprobadas}
 
     turnos_por_dia = {t.dia: t for t in turnos}
@@ -923,6 +1029,8 @@ def ejecutar_ia():
 
         permisos_por_empleado = {}
         for s in aprobadas:
+            if not solicitud_cuenta_como_ausencia_ia(s):
+                continue
             try:
                 dt = datetime.strptime(s.fecha, '%Y-%m-%d')
                 permisos_por_empleado.setdefault(s.empleado_id, set()).add(dt.weekday())
@@ -981,6 +1089,8 @@ def ejecutar_ia():
 
         ausencias_lista = []
         for s in aprobadas:
+            if not solicitud_cuenta_como_ausencia_ia(s):
+                continue
             try:
                 dt = datetime.strptime(s.fecha, '%Y-%m-%d')
                 empleado_ausente = Empleado.query.get(s.empleado_id)
@@ -1083,6 +1193,8 @@ def ver_horarios_ia():
 
     # Marcar los días de permisos aprobados
     for perm in permisos_aprobados:
+        if not solicitud_cuenta_como_ausencia_ia(perm):
+            continue
         try:
             dt = datetime.strptime(perm.fecha, '%Y-%m-%d')
             dia_semana = dt.weekday()
@@ -1181,14 +1293,18 @@ def solicitar_cancelacion(id):
     # Bloquear intento de cancelar suspensiones
     if solicitud and solicitud.mensaje_admin == 'Registro Administrativo Directo':
         flash('No tienes permiso para cancelar registros administrativos.', 'error')
-        return redirect(url_for('empleado_dashboard'))
+        return redirect(url_for('empleado_permisos'))
         
     if solicitud and solicitud.empleado_id == session['user_id']:
+        nota = (request.form.get('nota_empleado') or '').strip()[:300]
+        if nota:
+            solicitud.nota_empleado = nota
+        solicitud.estado_al_pedir_cancel = solicitud.estado
         solicitud.estado = 'Pide Cancelación'
         db.session.commit()
         flash('Solicitud de cancelación enviada al administrador.', 'success')
         
-    return redirect(url_for('empleado_dashboard'))
+    return redirect(url_for('empleado_permisos'))
 
 @app.route('/empleado/solicitud/nueva', methods=['POST'])
 def nueva_solicitud_empleado():
@@ -1196,26 +1312,70 @@ def nueva_solicitud_empleado():
         return jsonify({'status': 'error', 'mensaje': 'unauthorized'}), 401
 
     fecha = request.form.get('fecha')
-    motivo = request.form.get('motivo')
+    motivo = (request.form.get('motivo') or '').strip()
     tipo_permiso = request.form.get('tipo_permiso', 'dia_completo')
     hora_retorno = request.form.get('hora_retorno', '').strip()
+    categoria = (request.form.get('categoria') or 'permiso').strip()
+    if categoria not in ('permiso', 'cambio_descanso', 'cancelacion_falta'):
+        categoria = 'permiso'
 
+    if categoria == 'permiso':
+        if not fecha or not motivo:
+            return jsonify({'status': 'error', 'mensaje': 'Debes completar la fecha y el motivo.'}), 400
+        if tipo_permiso == 'parcial' and not hora_retorno:
+            return jsonify({'status': 'error', 'mensaje': 'Debes indicar la hora de entrada.'}), 400
+        nueva = Solicitud(
+            empleado_id=session['user_id'],
+            fecha=fecha,
+            motivo=motivo,
+            estado='Pendiente',
+            mensaje_admin='',
+            tipo_permiso=tipo_permiso,
+            hora_retorno=hora_retorno if tipo_permiso == 'parcial' else None,
+            categoria='permiso',
+        )
+        db.session.add(nueva)
+        db.session.commit()
+        return jsonify({'status': 'ok'})
+
+    if categoria == 'cambio_descanso':
+        motivo_cd = motivo or 'Cambio de día de descanso'
+        try:
+            d = int(request.form.get('dia_descanso_solicitado', ''))
+        except (TypeError, ValueError):
+            d = -1
+        if d < 0 or d > 6:
+            return jsonify({'status': 'error', 'mensaje': 'Selecciona un día de descanso válido.'}), 400
+        if not fecha:
+            return jsonify({'status': 'error', 'mensaje': 'Indica una fecha de referencia (semana objetivo).'}), 400
+        nueva = Solicitud(
+            empleado_id=session['user_id'],
+            fecha=fecha,
+            motivo=motivo_cd,
+            estado='Pendiente',
+            mensaje_admin='',
+            tipo_permiso='dia_completo',
+            hora_retorno=None,
+            categoria='cambio_descanso',
+            dia_descanso_solicitado=d,
+        )
+        db.session.add(nueva)
+        db.session.commit()
+        return jsonify({'status': 'ok'})
+
+    # cancelacion_falta
     if not fecha or not motivo:
-        return jsonify({'status': 'error', 'mensaje': 'Debes completar la fecha y el motivo.'}), 400
-
-    if tipo_permiso == 'parcial' and not hora_retorno:
-        return jsonify({'status': 'error', 'mensaje': 'Debes indicar la hora de entrada.'}), 400
-
+        return jsonify({'status': 'error', 'mensaje': 'Indica la fecha de la falta y el motivo de la impugnación.'}), 400
     nueva = Solicitud(
         empleado_id=session['user_id'],
         fecha=fecha,
         motivo=motivo,
         estado='Pendiente',
         mensaje_admin='',
-        tipo_permiso=tipo_permiso,
-        hora_retorno=hora_retorno if tipo_permiso == 'parcial' else None
+        tipo_permiso='dia_completo',
+        hora_retorno=None,
+        categoria='cancelacion_falta',
     )
-
     db.session.add(nueva)
     db.session.commit()
     return jsonify({'status': 'ok'})
@@ -1237,7 +1397,10 @@ def empleado_solicitudes_json():
             'estado': s.estado,
             'mensaje_admin': s.mensaje_admin or '',
             'tipo_permiso': s.tipo_permiso or 'dia_completo',
-            'hora_retorno': s.hora_retorno or ''
+            'hora_retorno': s.hora_retorno or '',
+            'categoria': categoria_solicitud(s),
+            'dia_descanso_solicitado': s.dia_descanso_solicitado,
+            'nota_empleado': (s.nota_empleado or ''),
         })
 
     return jsonify({'status': 'ok', 'solicitudes': payload})
@@ -1249,9 +1412,8 @@ def confirmar_cancelacion(id):
         
     solicitud = Solicitud.query.get(id)
     if solicitud and solicitud.estado == 'Pide Cancelación':
-        # IA Auto-gestión: cambios del admin no requieren validación adicional
-        # El admin ES la autorización. Cualquier acción suya se ejecuta inmediatamente.
         solicitud.estado = 'Cancelada'
+        solicitud.estado_al_pedir_cancel = None
 
         dia_semana = None
         try:
@@ -1260,32 +1422,50 @@ def confirmar_cancelacion(id):
             dia_semana = None
 
         empleado = Empleado.query.get(solicitud.empleado_id)
-        if empleado and dia_semana is not None and empleado.farmacia_id is not None:
-            HorarioGenerado.query.filter_by(empleado_id=empleado.id, dia=dia_semana).delete()
-            AsignacionTemporal.query.filter_by(empleado_id=empleado.id, fecha=solicitud.fecha).delete()
+        if empleado and dia_semana is not None:
+            cob_id = solicitud.cobertura_empleado_id
+            if cob_id:
+                HorarioGenerado.query.filter_by(empleado_id=cob_id, dia=dia_semana).delete()
+                AsignacionTemporal.query.filter_by(empleado_id=cob_id, fecha=solicitud.fecha).delete()
 
-            if empleado.dia_descanso_fijo is None or empleado.dia_descanso_fijo != dia_semana:
-                turno_restaurado = HorarioGenerado.query.filter_by(empleado_id=empleado.id, dia=dia_semana).first()
-                if turno_restaurado:
-                    turno_restaurado.farmacia_id = empleado.farmacia_id
-                else:
-                    turno_restaurado = HorarioGenerado(
-                        dia=dia_semana,
-                        empleado_id=empleado.id,
-                        farmacia_id=empleado.farmacia_id
-                    )
-                    db.session.add(turno_restaurado)
+            if empleado.farmacia_id is not None:
+                HorarioGenerado.query.filter_by(empleado_id=empleado.id, dia=dia_semana).delete()
+                AsignacionTemporal.query.filter_by(empleado_id=empleado.id, fecha=solicitud.fecha).delete()
 
-            turnos_cobertura = HorarioGenerado.query.filter_by(
-                farmacia_id=empleado.farmacia_id,
-                dia=dia_semana
-            ).all()
-            for turno in turnos_cobertura:
-                if turno.empleado and turno.empleado.rol == 'Comodin':
-                    db.session.delete(turno)
+                if empleado.dia_descanso_fijo is None or empleado.dia_descanso_fijo != dia_semana:
+                    turno_restaurado = HorarioGenerado.query.filter_by(empleado_id=empleado.id, dia=dia_semana).first()
+                    if turno_restaurado:
+                        turno_restaurado.farmacia_id = empleado.farmacia_id
+                    else:
+                        turno_restaurado = HorarioGenerado(
+                            dia=dia_semana,
+                            empleado_id=empleado.id,
+                            farmacia_id=empleado.farmacia_id
+                        )
+                        db.session.add(turno_restaurado)
 
         db.session.commit()
+        flash('Cancelación aceptada. Revisa horarios y ejecuta OR-Tools si aplica.', 'success')
         return redirect(url_for('admin_solicitudes'))
+
+    return redirect(url_for('admin_solicitudes'))
+
+
+@app.route('/admin/solicitudes/rechazar_cancelacion/<int:id>', methods=['GET', 'POST'])
+def rechazar_cancelacion_solicitud(id):
+    if 'user_id' not in session or session.get('rol') != 'Admin':
+        return redirect(url_for('login'))
+
+    solicitud = Solicitud.query.get(id)
+    if solicitud and solicitud.estado == 'Pide Cancelación':
+        prev = solicitud.estado_al_pedir_cancel or 'Aprobada'
+        solicitud.estado = prev
+        solicitud.estado_al_pedir_cancel = None
+        base = (solicitud.mensaje_admin or '').strip()
+        suf = 'Cancelación rechazada por administración.'
+        solicitud.mensaje_admin = (base + (' · ' if base else '') + suf)[:200]
+        db.session.commit()
+        flash('Se rechazó la cancelación; el permiso conserva su estado anterior.', 'info')
 
     return redirect(url_for('admin_solicitudes'))
 
@@ -1384,6 +1564,14 @@ def asegurar_columnas_solicitud():
         sentencias.append("ALTER TABLE solicitud ADD COLUMN hora_retorno VARCHAR(10)")
     if 'cobertura_empleado_id' not in columnas:
         sentencias.append("ALTER TABLE solicitud ADD COLUMN cobertura_empleado_id INTEGER")
+    if 'categoria' not in columnas:
+        sentencias.append("ALTER TABLE solicitud ADD COLUMN categoria VARCHAR(32) DEFAULT 'permiso'")
+    if 'dia_descanso_solicitado' not in columnas:
+        sentencias.append("ALTER TABLE solicitud ADD COLUMN dia_descanso_solicitado INTEGER")
+    if 'estado_al_pedir_cancel' not in columnas:
+        sentencias.append("ALTER TABLE solicitud ADD COLUMN estado_al_pedir_cancel VARCHAR(50)")
+    if 'nota_empleado' not in columnas:
+        sentencias.append("ALTER TABLE solicitud ADD COLUMN nota_empleado VARCHAR(300)")
 
     if not sentencias:
         return

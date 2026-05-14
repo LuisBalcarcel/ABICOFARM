@@ -11,10 +11,13 @@
         .brand span { color: white; font-size: 12px; }
         .menu-item { padding: 15px 10px; margin-bottom: 5px; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; color: #a0aec0; text-decoration: none; display: block; }
         .menu-item.active { background-color: #ff6b00; color: white; }
-        .main-content { flex: 1; padding: 40px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .main-content { flex: 1; padding: 40px; display: flex; flex-direction: column; gap: 24px; max-width: 1100px; }
         .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
-        input, select { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ccc; border-radius: 8px; font-family: 'Montserrat'; box-sizing: border-box; }
-        button { background-color: #ff6b00; color: white; border: none; padding: 10px 15px; border-radius: 8px; cursor: pointer; font-weight: bold; }
+        .card h3 { margin-top: 0; color: #003366; }
+        .card-sub { font-size: 13px; color: #546e7a; margin-bottom: 14px; line-height: 1.4; }
+        input, select, textarea { width: 100%; padding: 10px; margin: 8px 0; border: 1px solid #ccc; border-radius: 8px; font-family: 'Montserrat'; box-sizing: border-box; }
+        button.primary { background-color: #ff6b00; color: white; border: none; padding: 10px 18px; border-radius: 8px; cursor: pointer; font-weight: bold; }
+        button.soft { background: #ffebee; color: #c62828; padding: 6px 12px; border-radius: 6px; border: none; cursor: pointer; font-size: 12px; font-weight: bold; }
         table { width: 100%; border-collapse: collapse; margin-top: 15px; }
         td, th { padding: 10px; border-bottom: 1px solid #eee; font-size: 13px; }
         .estado-aprobada { color: green; font-weight: bold; }
@@ -23,6 +26,7 @@
         .estado-cancelada { color: red; font-weight: bold; }
         .estado-pide-cancelacion { color: purple; font-weight: bold; }
         .logout { color: #ff6b00; font-weight: bold; text-decoration: none; }
+        .grid-forms { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
     </style>
 </head>
 <body>
@@ -38,45 +42,94 @@
     </div>
 
     <div class="main-content">
-        <div class="card">
-            <h3 style="margin-top:0;">Solicitar Permiso (Ausencia)</h3>
-            <form id="solicitud-form" action="{{ url_for('nueva_solicitud_empleado') }}" method="POST">
-                <label>Fecha exacta a faltar:</label>
-                <input type="date" name="fecha" required>
-                <label>Motivo:</label>
-                <input type="text" name="motivo" placeholder="Ej. Cita médica, Asunto personal..." required>
-                <div style="margin-top: 10px;">
-                    <label style="font-size: 13px; font-weight: 600;">Tipo de permiso:</label>
-                    <div style="display:flex; gap:12px; margin-top:6px;">
-                        <label style="font-size:12px;"><input type="radio" name="tipo_permiso" value="dia_completo" checked> Día completo</label>
-                        <label style="font-size:12px;"><input type="radio" name="tipo_permiso" value="parcial"> Permiso parcial</label>
+        <div class="grid-forms">
+            <div class="card">
+                <h3>Permiso laboral</h3>
+                <p class="card-sub">Día completo (no trabajas) o parcial (indica a qué hora regresas). El administrador debe asignar quién te cubre.</p>
+                <form id="solicitud-permiso" action="{{ url_for('nueva_solicitud_empleado') }}" method="POST">
+                    <input type="hidden" name="categoria" value="permiso">
+                    <label>Fecha:</label>
+                    <input type="date" name="fecha" required>
+                    <label>Motivo:</label>
+                    <input type="text" name="motivo" placeholder="Ej. Cita médica" required>
+                    <div style="margin-top: 8px;">
+                        <label style="font-size: 13px; font-weight: 600;">Tipo:</label>
+                        <div style="display:flex; gap:12px; margin-top:6px;">
+                            <label style="font-size:12px;"><input type="radio" name="tipo_permiso" value="dia_completo" checked> Día completo</label>
+                            <label style="font-size:12px;"><input type="radio" name="tipo_permiso" value="parcial"> Parcial</label>
+                        </div>
                     </div>
-                </div>
-                <div id="permiso-parcial" style="display:none; margin-top:10px;">
-                    <label>Hora de entrada (regreso al trabajo):</label>
-                    <input type="time" name="hora_retorno" id="hora_retorno">
-                </div>
-                <button type="submit">Enviar Solicitud</button>
-            </form>
-            <div id="solicitud-mensaje" style="margin-top: 10px; font-size: 12px;"></div>
+                    <div id="permiso-parcial" style="display:none; margin-top:8px;">
+                        <label>Hora de entrada (regreso):</label>
+                        <input type="time" name="hora_retorno" id="hora_retorno">
+                    </div>
+                    <button type="submit" class="primary" style="margin-top:12px;">Enviar</button>
+                </form>
+                <div id="msg-permiso" style="margin-top:8px; font-size:12px;"></div>
+            </div>
+
+            <div class="card">
+                <h3>Cambio de día de descanso</h3>
+                <p class="card-sub">Si tu descanso era un día y deseas otro para la semana de referencia, solicítalo aquí. Si se aprueba, quedará tu <b>descanso fijo</b> y la IA lo respetará al regenerar horarios.</p>
+                <form id="solicitud-descanso" action="{{ url_for('nueva_solicitud_empleado') }}" method="POST">
+                    <input type="hidden" name="categoria" value="cambio_descanso">
+                    <label>Semana de referencia (cualquier fecha dentro de esa semana):</label>
+                    <input type="date" name="fecha" required>
+                    <label>Nuevo día de descanso deseado:</label>
+                    <select name="dia_descanso_solicitado" required>
+                        <option value="">Selecciona…</option>
+                        <option value="0">Lunes</option>
+                        <option value="1">Martes</option>
+                        <option value="2">Miércoles</option>
+                        <option value="3">Jueves</option>
+                        <option value="4">Viernes</option>
+                        <option value="5">Sábado</option>
+                        <option value="6">Domingo</option>
+                    </select>
+                    <label>Motivo (opcional):</label>
+                    <input type="text" name="motivo" placeholder="Ej. Curso los domingos">
+                    <button type="submit" class="primary" style="margin-top:12px;">Enviar solicitud</button>
+                </form>
+                <div id="msg-descanso" style="margin-top:8px; font-size:12px;"></div>
+            </div>
+
+            <div class="card">
+                <h3>Impugnar falta administrativa</h3>
+                <p class="card-sub">Si el administrador registró una falta/suspensión y consideras que debe revisarse, indica la <b>misma fecha</b> del registro y el motivo. El admin acepta o rechaza.</p>
+                <form id="solicitud-falta" action="{{ url_for('nueva_solicitud_empleado') }}" method="POST">
+                    <input type="hidden" name="categoria" value="cancelacion_falta">
+                    <label>Fecha de la falta registrada:</label>
+                    <input type="date" name="fecha" required>
+                    <label>Motivo de la impugnación:</label>
+                    <textarea name="motivo" rows="3" placeholder="Describe por qué solicitas la revisión…" required></textarea>
+                    <button type="submit" class="primary" style="margin-top:12px;">Enviar</button>
+                </form>
+                <div id="msg-falta" style="margin-top:8px; font-size:12px;"></div>
+            </div>
         </div>
 
         <div class="card">
-            <h3 style="margin-top:0;">Estado de mis solicitudes</h3>
+            <h3>Mis solicitudes</h3>
             <table>
                 <thead>
-                    <tr><th>Fecha</th><th>Motivo</th><th>Tipo</th><th>Estado</th><th>Respuesta Admin</th><th>Acción</th></tr>
+                    <tr><th>Fecha</th><th>Motivo</th><th>Tipo</th><th>Estado</th><th>Respuesta</th><th>Acción</th></tr>
                 </thead>
                 <tbody id="solicitudes-body">
+                    {% set dias_c = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'] %}
                     {% for s in solicitudes %}
                     <tr>
                         <td>{{ s.fecha }}</td>
-                        <td>{{ s.motivo }}</td>
+                        <td>{{ s.motivo }}{% if s.nota_empleado %}<br><small style="color:#5c6bc0;">Nota: {{ s.nota_empleado }}</small>{% endif %}</td>
                         <td>
-                            {% if s.tipo_permiso == 'parcial' %}
+                            {% set cat = s.categoria or 'permiso' %}
+                            {% if cat == 'cambio_descanso' and s.dia_descanso_solicitado is not none %}
+                                Cambio descanso → {{ dias_c[s.dia_descanso_solicitado] }}
+                            {% elif cat == 'cancelacion_falta' %}
+                                Impugnación falta
+                            {% elif s.tipo_permiso == 'parcial' %}
                                 Parcial (entra {{ s.hora_retorno }})
                             {% else %}
-                                Día completo
+                                Permiso día completo
                             {% endif %}
                         </td>
                         <td class="{% if 'Aprobada' in s.estado %}estado-aprobada{% elif s.estado=='Rechazada' or s.estado=='Cancelada' %}estado-rechazada{% elif s.estado=='Pide Cancelación' %}estado-pide-cancelacion{% else %}estado-pendiente{% endif %}">{{ s.estado }}</td>
@@ -84,10 +137,11 @@
                         <td>
                             {% if 'Aprobada' in s.estado and s.mensaje_admin != 'Registro Administrativo Directo' %}
                             <form action="{{ url_for('solicitar_cancelacion', id=s.id) }}" method="POST" style="margin:0;">
-                                <button type="submit" style="background:#ffebee; color:#d32f2f; padding:5px 10px; border-radius:4px; border:none; cursor:pointer; font-size:12px; font-weight:bold;" onclick="return confirm('¿Seguro que deseas cancelar este permiso?');">Cancelar</button>
+                                <textarea name="nota_empleado" rows="2" placeholder="Motivo de la cancelación (opcional)" style="font-size:11px; margin-bottom:4px;"></textarea>
+                                <button type="submit" class="soft" onclick="return confirm('¿Solicitar cancelación de este permiso al administrador?');">Solicitar cancelación</button>
                             </form>
                             {% elif s.mensaje_admin == 'Registro Administrativo Directo' %}
-                                <span style="font-size: 11px; color: #999;">-</span>
+                                <span style="font-size: 11px; color: #999;">—</span>
                             {% endif %}
                         </td>
                     </tr>
@@ -99,23 +153,27 @@
 
     <script>
         function estadoClase(estado) {
-            if (estado.includes('Aprobada')) {
-                return 'estado-aprobada';
-            }
-            if (estado === 'Rechazada' || estado === 'Cancelada') {
-                return 'estado-rechazada';
-            }
-            if (estado === 'Pide Cancelación') {
-                return 'estado-pide-cancelacion';
-            }
+            if (estado.includes('Aprobada')) return 'estado-aprobada';
+            if (estado === 'Rechazada' || estado === 'Cancelada') return 'estado-rechazada';
+            if (estado === 'Pide Cancelación') return 'estado-pide-cancelacion';
             return 'estado-pendiente';
+        }
+
+        function etiquetaTipo(s) {
+            const cat = (s.categoria || 'permiso').trim();
+            const dn = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+            if (cat === 'cambio_descanso') {
+                const di = parseInt(s.dia_descanso_solicitado, 10);
+                return `Cambio descanso → ${dn[di] || '?'}`;
+            }
+            if (cat === 'cancelacion_falta') return 'Impugnación falta';
+            if (s.tipo_permiso === 'parcial') return `Parcial (entra ${s.hora_retorno || '—'})`;
+            return 'Permiso día completo';
         }
 
         function renderSolicitudes(data) {
             const body = document.getElementById('solicitudes-body');
-            if (!body) {
-                return;
-            }
+            if (!body) return;
 
             const solicitudes = data.solicitudes || [];
             let html = '';
@@ -123,25 +181,25 @@
             solicitudes.forEach((s) => {
                 const clase = estadoClase(s.estado);
                 const mensaje = s.mensaje_admin || '-';
+                const nota = s.nota_empleado ? `<br><small style="color:#5c6bc0;">Nota: ${s.nota_empleado}</small>` : '';
                 let accion = '';
 
                 if (s.estado.includes('Aprobada') && s.mensaje_admin !== 'Registro Administrativo Directo') {
                     accion = `
                         <form action="/empleado/solicitud/cancelar/${s.id}" method="POST" style="margin:0;">
-                            <button type="submit" style="background:#ffebee; color:#d32f2f; padding:5px 10px; border-radius:4px; border:none; cursor:pointer; font-size:12px; font-weight:bold;" onclick="return confirm('¿Seguro que deseas cancelar este permiso?');">Cancelar</button>
+                            <textarea name="nota_empleado" rows="2" placeholder="Motivo (opcional)" style="font-size:11px; margin-bottom:4px;"></textarea>
+                            <button type="submit" class="soft" onclick="return confirm('¿Solicitar cancelación al administrador?');">Solicitar cancelación</button>
                         </form>
                     `;
                 } else if (s.mensaje_admin === 'Registro Administrativo Directo') {
-                    accion = '<span style="font-size: 11px; color: #999;">-</span>';
+                    accion = '<span style="font-size: 11px; color: #999;">—</span>';
                 }
-
-                const tipoPermiso = s.tipo_permiso === 'parcial' ? `Parcial (entra ${s.hora_retorno || '-'})` : 'Día completo';
 
                 html += `
                     <tr>
                         <td>${s.fecha}</td>
-                        <td>${s.motivo}</td>
-                        <td>${tipoPermiso}</td>
+                        <td>${s.motivo}${nota}</td>
+                        <td>${etiquetaTipo(s)}</td>
                         <td class="${clase}">${s.estado}</td>
                         <td style="font-size:12px; color:#666;">${mensaje}</td>
                         <td>${accion}</td>
@@ -155,84 +213,70 @@
         async function refrescarSolicitudes() {
             try {
                 const resp = await fetch('/empleado/solicitudes/json', { cache: 'no-store' });
-                if (!resp.ok) {
-                    return;
-                }
+                if (!resp.ok) return;
                 const data = await resp.json();
                 renderSolicitudes(data);
             } catch (err) {
-                console.error('Error al actualizar solicitudes del empleado', err);
+                console.error(err);
             }
         }
 
-        const form = document.getElementById('solicitud-form');
-        const mensajeEl = document.getElementById('solicitud-mensaje');
-
-        if (form) {
-            form.addEventListener('submit', async (event) => {
-                event.preventDefault();
-
-                if (mensajeEl) {
-                    mensajeEl.textContent = '';
+        async function enviarFormulario(form, msgEl) {
+            if (msgEl) { msgEl.textContent = ''; }
+            try {
+                const fd = new FormData(form);
+                const resp = await fetch(form.action, { method: 'POST', body: fd });
+                const data = await resp.json();
+                if (!resp.ok || data.status !== 'ok') {
+                    if (msgEl) {
+                        msgEl.textContent = '❌ ' + (data.mensaje || 'No se pudo enviar');
+                        msgEl.style.color = '#c62828';
+                    }
+                    return;
                 }
-
-                try {
-                    const formData = new FormData(form);
-                    const resp = await fetch(form.action, {
-                        method: 'POST',
-                        body: formData
-                    });
-
-                    const data = await resp.json();
-                    if (!resp.ok || data.status !== 'ok') {
-                        if (mensajeEl) {
-                            mensajeEl.textContent = '❌ Error al enviar la solicitud';
-                            mensajeEl.style.color = '#d32f2f';
-                        }
-                        return;
-                    }
-
-                    if (mensajeEl) {
-                        mensajeEl.textContent = '✅ Solicitud enviada correctamente';
-                        mensajeEl.style.color = '#2e7d32';
-                    }
-
-                    form.reset();
-                    await refrescarSolicitudes();
-                } catch (err) {
-                    if (mensajeEl) {
-                        mensajeEl.textContent = '❌ Error al enviar la solicitud';
-                        mensajeEl.style.color = '#d32f2f';
-                    }
-                    console.error('Error enviando solicitud', err);
+                if (msgEl) {
+                    msgEl.textContent = '✅ Enviado correctamente';
+                    msgEl.style.color = '#2e7d32';
                 }
-            });
+                form.reset();
+                actualizarTipoPermiso();
+                await refrescarSolicitudes();
+            } catch (e) {
+                if (msgEl) {
+                    msgEl.textContent = '❌ Error de red';
+                    msgEl.style.color = '#c62828';
+                }
+            }
         }
 
-        const permisoRadios = document.querySelectorAll('input[name="tipo_permiso"]');
+        document.getElementById('solicitud-permiso')?.addEventListener('submit', (e) => {
+            e.preventDefault();
+            enviarFormulario(e.target, document.getElementById('msg-permiso'));
+        });
+        document.getElementById('solicitud-descanso')?.addEventListener('submit', (e) => {
+            e.preventDefault();
+            enviarFormulario(e.target, document.getElementById('msg-descanso'));
+        });
+        document.getElementById('solicitud-falta')?.addEventListener('submit', (e) => {
+            e.preventDefault();
+            enviarFormulario(e.target, document.getElementById('msg-falta'));
+        });
+
+        const permisoRadios = document.querySelectorAll('#solicitud-permiso input[name="tipo_permiso"]');
         const bloqueParcial = document.getElementById('permiso-parcial');
         const horaRetorno = document.getElementById('hora_retorno');
 
         function actualizarTipoPermiso() {
-            const seleccionado = document.querySelector('input[name="tipo_permiso"]:checked');
-            if (!seleccionado) {
-                return;
-            }
-            const esParcial = seleccionado.value === 'parcial';
-            if (bloqueParcial) {
-                bloqueParcial.style.display = esParcial ? 'block' : 'none';
-            }
-            if (horaRetorno) {
-                horaRetorno.required = esParcial;
-            }
+            const sel = document.querySelector('#solicitud-permiso input[name="tipo_permiso"]:checked');
+            if (!sel) return;
+            const esParcial = sel.value === 'parcial';
+            if (bloqueParcial) bloqueParcial.style.display = esParcial ? 'block' : 'none';
+            if (horaRetorno) horaRetorno.required = esParcial;
         }
-
-        permisoRadios.forEach((radio) => {
-            radio.addEventListener('change', actualizarTipoPermiso);
-        });
+        permisoRadios.forEach((r) => r.addEventListener('change', actualizarTipoPermiso));
         actualizarTipoPermiso();
 
-        setInterval(refrescarSolicitudes, 15000);
+        setInterval(refrescarSolicitudes, 20000);
     </script>
 </body>
 </html>

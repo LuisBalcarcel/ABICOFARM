@@ -10,7 +10,7 @@
         h1 { margin-top: 0; color: #ff6b00; }
         .form-group { margin-bottom: 20px; }
         label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 8px; }
-        input[type="date"], input[type="text"] { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 8px; font-family: 'Montserrat'; box-sizing: border-box; }
+        input[type="date"], input[type="text"], select { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 8px; font-family: 'Montserrat'; box-sizing: border-box; }
         .info-box { background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px; font-size: 14px;}
         .btn { background-color: #00bcd4; color: white; border: none; padding: 14px 20px; border-radius: 8px; font-weight: 700; cursor: pointer;}
         .btn-cancel { background-color: #eee; color: #333; margin-left: 10px; text-decoration: none; padding: 14px 20px; border-radius: 8px; font-weight: bold;}
@@ -18,32 +18,52 @@
 </head>
 <body>
     <div class="container">
-        <h1>Modificar Permiso: {{ solicitud.empleado.nombre }}</h1>
+        <h1>{% if es_registro_admin %}Editar registro administrativo{% else %}Modificar permiso{% endif %}: {{ solicitud.empleado.nombre }}</h1>
         
         <div class="info-box">
-            <b>Fecha original solicitada:</b> {{ solicitud.fecha }}<br>
-            <b>Motivo:</b> {{ solicitud.motivo }}
-            {% if solicitud.tipo_permiso == 'parcial' %}<br>
-            <b>Tipo de permiso:</b> Parcial (entra {{ solicitud.hora_retorno }})
+            <b>Fecha solicitada:</b> {{ solicitud.fecha }}<br>
+            <b>Motivo:</b> {{ solicitud.motivo }}<br>
+            {% if not es_registro_admin %}
+            <b>Tipo:</b>
+            {% if solicitud.tipo_permiso == 'parcial' %}
+                Permiso parcial (entrada {{ solicitud.hora_retorno or '—' }})
+            {% else %}
+                Día completo
+            {% endif %}
+            {% else %}
+            <b>Tipo:</b> Registro administrativo directo
             {% endif %}
         </div>
-        
+
+        {% if es_registro_admin %}
         <form method="POST">
             <div class="form-group">
-                <label>Nueva fecha propuesta (Aprobada):</label>
+                <label>Fecha del registro:</label>
+                <input type="date" name="nueva_fecha" value="{{ solicitud.fecha }}" required>
+            </div>
+            <div class="form-group">
+                <label>Nota adicional (opcional):</label>
+                <input type="text" name="mensaje" placeholder="Se anexa al registro sin perder el tipo administrativo.">
+            </div>
+            <button type="submit" class="btn">Guardar</button>
+            <a href="{{ url_for('admin_solicitudes') }}" class="btn-cancel">Volver</a>
+        </form>
+        {% else %}
+        <form method="POST">
+            <div class="form-group">
+                <label>Fecha acordada (aprobada):</label>
                 <input type="date" name="nueva_fecha" value="{{ solicitud.fecha }}" required>
             </div>
 
             <div class="form-group">
-                <label>Mensaje / Razón del cambio (Lo verá el empleado):</label>
-                <input type="text" name="mensaje" placeholder="Ej. El 23 no puedo, te doy el 24." required>
+                <label>Mensaje para el empleado (obligatorio):</label>
+                <input type="text" name="mensaje" placeholder="Ej. Aprobado con el cambio de fecha." required>
             </div>
 
-            {% if solicitud.tipo_permiso == 'parcial' %}
             <div class="form-group">
-                <label>Reemplazo (obligatorio para permiso parcial):</label>
+                <label>Reemplazo en sucursal (obligatorio — día completo o parcial):</label>
                 <select name="cobertura_empleado_id" required>
-                    <option value="">Selecciona un reemplazo</option>
+                    <option value="">Selecciona dependiente o comodín</option>
                     {% for e in cobertura_opciones %}
                     <option value="{{ e.id }}" {% if solicitud.cobertura_empleado_id == e.id %}selected{% endif %}>{{ e.nombre }} ({{ e.rol }})</option>
                     {% endfor %}
@@ -51,12 +71,13 @@
                 {% if error_cobertura %}
                 <div style="margin-top:6px; color:#c62828; font-size:12px; font-weight:600;">{{ error_cobertura }}</div>
                 {% endif %}
+                <p style="font-size:12px; color:#666; margin-top:8px;">La asignación queda registrada para el motor OR-Tools (forzada a la misma sucursal base del solicitante).</p>
             </div>
-            {% endif %}
 
-            <button type="submit" class="btn">Aprobar con Modificación</button>
-            <a href="{{ url_for('admin_solicitudes') }}" class="btn-cancel">Cancelar</a>
+            <button type="submit" class="btn">Aprobar con modificación</button>
+            <a href="{{ url_for('admin_solicitudes') }}" class="btn-cancel">Volver</a>
         </form>
+        {% endif %}
     </div>
 </body>
 </html>
