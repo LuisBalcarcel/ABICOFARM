@@ -110,17 +110,15 @@ def acceso_dev():
 
 
 def validar_password(usuario, password_plano):
-    if not usuario or not password_plano:
-        return False
+    password_bd = usuario.password
 
-    try:
-        if usuario.password and usuario.password.startswith('pbkdf2:'):
-            return check_password_hash(usuario.password, password_plano)
-    except Exception:
-        pass
+    # Caso 1: ya está hasheada con werkzeug
+    if password_bd.startswith(('scrypt:', 'pbkdf2:', '$2b$', '$2a$')):
+        return check_password_hash(password_bd, password_plano)
 
-    if usuario.password == password_plano:
-        # Migra a hash cuando el usuario inicia sesion correctamente
+    # Caso 2: texto plano (legado)
+    if password_plano == password_bd:
+        # Migrar automáticamente a hash en este momento
         usuario.password = generate_password_hash(password_plano)
         db.session.commit()
         return True
