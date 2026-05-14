@@ -612,7 +612,7 @@ def dev_reset_password(id):
 
 @app.route('/dev/forzar-logout/<int:id>', methods=['POST'])
 def dev_forzar_logout(id):
-    if session.get('rol') != 'Desarrollador':
+    if not acceso_dev():
         return jsonify({"status": "error", "mensaje": "No autorizado"}), 403
 
     empleado = Empleado.query.get_or_404(id)
