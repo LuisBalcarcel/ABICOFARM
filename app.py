@@ -42,6 +42,7 @@ class Empleado(db.Model):
     password = db.Column(db.String(255))
     ultimo_login = db.Column(db.DateTime, nullable=True)
     activo_ahora = db.Column(db.Boolean, default=False, server_default='false')
+    forzar_logout = db.Column(db.Boolean, default=False, server_default='false')
     
     # NUEVO: Día fijo de descanso (0=Lunes, 6=Domingo)
     dia_descanso_fijo = db.Column(db.Integer, nullable=True) 
@@ -87,6 +88,7 @@ def login():
             user.activo_ahora = True
             db.session.commit()
             session['user_id'] = user.id
+            session['empleado_id'] = user.id
             session['rol'] = user.rol
             session['nombre'] = user.nombre
             session['username'] = user.username
@@ -124,6 +126,40 @@ def validar_password(usuario, password_plano):
         return True
 
     return False
+
+
+def verificar_sesion_activa():
+    empleado_id = session.get('empleado_id') or session.get('user_id')
+    if not empleado_id:
+        return redirect('/login')
+
+    empleado = Empleado.query.get(empleado_id)
+    if not empleado:
+        return redirect('/login')
+
+    if empleado.forzar_logout:
+        empleado.forzar_logout = False
+        empleado.activo_ahora = False
+        db.session.commit()
+        session.clear()
+        flash('Tu sesión fue cerrada por el administrador del sistema.')
+        return redirect('/login')
+
+    return None
+
+
+@app.before_request
+def proteger_rutas_con_sesion():
+    endpoint = request.endpoint or ''
+    if endpoint in {'login', 'logout', 'static'}:
+        return None
+
+    if request.path.startswith(('/admin', '/empleado', '/dev')):
+        resultado = verificar_sesion_activa()
+        if resultado:
+            return resultado
+
+    return None
 
 @app.route('/admin')
 def admin_dashboard():
@@ -548,7 +584,8 @@ def dev_usuarios_json():
             'rol': e.rol,
             'sucursal': sucursal,
             'ultimo_login': ultimo_login,
-            'activo_ahora': bool(e.activo_ahora)
+            'activo_ahora': bool(e.activo_ahora),
+            'forzar_logout': bool(e.forzar_logout)
         })
 
     return jsonify(payload)
@@ -572,13 +609,36 @@ def dev_reset_password(id):
     db.session.commit()
     return jsonify({'status': 'ok', 'mensaje': f'Contraseña actualizada para {empleado.nombre}'})
 
+
+@app.route('/dev/forzar-logout/<int:id>', methods=['POST'])
+def dev_forzar_logout(id):
+    if not acceso_dev():
+        return jsonify({'status': 'error', 'mensaje': 'unauthorized'}), 401
+
+    empleado = Empleado.query.get(id)
+    if not empleado:
+        return jsonify({'status': 'error', 'mensaje': 'Usuario no encontrado'}), 404
+
+    empleado.forzar_logout = True
+    empleado.activo_ahora = False
+    db.session.commit()
+    return jsonify({'status': 'ok', 'mensaje': f'Sesión de {empleado.nombre} será cerrada en su próxima acción'})
+
 # --- CRUD DE EMPLEADOS ---
 @app.route('/admin/empleado/nuevo', methods=['GET', 'POST'])
 def nuevo_empleado():
-    if 'user_id' not in session or session.get('rol') != 'Admin':
+    if 'user_id' not in session or session.get('rol') not in ('Admin', 'Desarrollador'):
         return redirect(url_for('login'))
     
     if request.method == 'POST':
+        rol_nuevo = request.form.get('rol', '')
+        if rol_nuevo == 'Administrador':
+            rol_nuevo = 'Admin'
+
+        if rol_nuevo in ('Admin', 'Desarrollador') and session.get('rol') != 'Desarrollador':
+            flash('Solo el desarrollador puede crear administradores')
+            return redirect(url_for('nuevo_empleado'))
+
         fid = request.form.get('farmacia_id', '')
         
         # Procesar el horario a partir de los inputs de hora
@@ -594,7 +654,7 @@ def nuevo_empleado():
         
         nuevo = Empleado(
             nombre=request.form['nombre'],
-            rol=request.form['rol'],
+            rol=rol_nuevo,
             horario=horario_final,
             farmacia_id=None if fid == "" else int(fid),
             username=request.form['username'],
@@ -611,7 +671,7 @@ def nuevo_empleado():
 
 @app.route('/admin/empleado/editar/<int:id>', methods=['GET', 'POST'])
 def editar_empleado(id):
-    if 'user_id' not in session or session.get('rol') != 'Admin':
+    if 'user_id' not in session or session.get('rol') not in ('Admin', 'Desarrollador'):
         return redirect(url_for('login'))
         
     empleado = Empleado.query.get(id)
@@ -625,7 +685,13 @@ def editar_empleado(id):
 
     if request.method == 'POST':
         empleado.nombre = request.form.get('nombre', empleado.nombre)
-        empleado.rol = request.form.get('rol', empleado.rol)
+        rol_nuevo = request.form.get('rol', empleado.rol)
+        if rol_nuevo == 'Administrador':
+            rol_nuevo = 'Admin'
+        if rol_nuevo in ('Admin', 'Desarrollador') and session.get('rol') != 'Desarrollador':
+            flash('Solo el desarrollador puede crear administradores')
+            return redirect(url_for('editar_empleado', id=id))
+        empleado.rol = rol_nuevo
 
         horario_variable = 'horario_variable' in request.form or 'es_comodin' in request.form
         hora_entrada = request.form.get('hora_entrada', request.form.get('hora_inicio', '')).strip()
@@ -1157,6 +1223,8 @@ def asegurar_columnas_empleado():
         sentencias.append('ALTER TABLE empleado ADD COLUMN ultimo_login TIMESTAMP')
     if 'activo_ahora' not in columnas:
         sentencias.append("ALTER TABLE empleado ADD COLUMN activo_ahora BOOLEAN DEFAULT false")
+    if 'forzar_logout' not in columnas:
+        sentencias.append("ALTER TABLE empleado ADD COLUMN forzar_logout BOOLEAN DEFAULT false")
 
     if not sentencias:
         return

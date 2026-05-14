@@ -38,9 +38,15 @@
             <div class="form-group">
                 <label>Rol del Sistema</label>
                 <select name="rol" id="rolSelect" required>
+                    {% if empleado and empleado.rol in ['Admin', 'Desarrollador'] and session.get('rol') != 'Desarrollador' %}
+                    <option value="{{ empleado.rol }}" selected hidden>{{ 'Administrador' if empleado.rol == 'Admin' else 'Desarrollador' }}</option>
+                    {% endif %}
                     <option value="Dependiente" {% if empleado and empleado.rol == 'Dependiente' %}selected{% endif %}>Dependiente</option>
                     <option value="Comodin" {% if empleado and empleado.rol == 'Comodin' %}selected{% endif %}>Comodín</option>
+                    {% if session.get('rol') == 'Desarrollador' %}
                     <option value="Admin" {% if empleado and empleado.rol == 'Admin' %}selected{% endif %}>Administrador</option>
+                    <option value="Desarrollador" {% if empleado and empleado.rol == 'Desarrollador' %}selected{% endif %}>Desarrollador</option>
+                    {% endif %}
                 </select>
             </div>
 

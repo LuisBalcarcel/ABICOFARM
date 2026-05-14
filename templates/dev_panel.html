@@ -19,8 +19,10 @@
         th { color: #9ca3af; font-weight: 600; }
         .estado-on { color: #22c55e; font-weight: 700; }
         .estado-off { color: #ef4444; font-weight: 700; }
+        .estado-pending { color: #f59e0b; font-weight: 700; }
         .toast { position: fixed; top: 20px; right: 20px; background: #16a34a; color: white; padding: 10px 14px; border-radius: 8px; font-size: 12px; display: none; }
         .toast.error { background: #dc2626; }
+        .toast.warning { background: #d97706; }
         dialog { border: none; border-radius: 10px; padding: 20px; background: #0f172a; color: #e6edf3; }
         dialog::backdrop { background: rgba(0,0,0,0.6); }
         .dialog-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 15px; }
@@ -48,6 +50,7 @@
                         <th>Sucursal</th>
                         <th>Último Login</th>
                         <th>Tiempo en sesión</th>
+                        <th>Acciones</th>
                     </tr>
                 </thead>
                 <tbody id="tabla-activos"></tbody>
@@ -103,12 +106,18 @@
         let usuariosCache = [];
         let usuarioSeleccionado = null;
 
-        function mostrarToast(texto, esError) {
+        function mostrarToast(texto, tipo) {
             if (!toast) {
                 return;
             }
             toast.textContent = texto;
-            toast.classList.toggle('error', !!esError);
+            toast.classList.remove('error', 'warning');
+            if (tipo === 'error' || tipo === true) {
+                toast.classList.add('error');
+            }
+            if (tipo === 'warning') {
+                toast.classList.add('warning');
+            }
             toast.style.display = 'block';
             setTimeout(() => {
                 toast.style.display = 'none';
@@ -133,6 +142,33 @@
             return `${minsRest}m`;
         }
 
+        function renderEstadoUsuario(u) {
+            if (u.forzar_logout) {
+                return '<span class="estado-pending">🟡 Logout pendiente</span>';
+            }
+            if (u.activo_ahora) {
+                return '<span class="estado-on">🟢 Conectado</span>';
+            }
+            return '<span class="estado-off">🔴 Desconectado</span>';
+        }
+
+        function forzarLogout(id, nombre) {
+            if (!confirm(`¿Cerrar sesión de ${nombre}?`)) return;
+
+            fetch(`/dev/forzar-logout/${id}`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({})
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'ok') {
+                    mostrarToast(`⏏ ${data.mensaje}`, 'warning');
+                    setTimeout(() => location.reload(), 1500);
+                }
+            });
+        }
+
         function renderTablas(usuarios) {
             const activos = usuarios.filter((u) => u.activo_ahora);
             tablaActivos.innerHTML = activos.map((u) => `
@@ -142,6 +178,7 @@
                     <td>${u.sucursal}</td>
                     <td>${u.ultimo_login || '-'}</td>
                     <td data-ultimo-login="${u.ultimo_login || ''}">${formatearTiempo(u.ultimo_login)}</td>
+                    <td><button onclick="forzarLogout(${u.id}, ${JSON.stringify(u.nombre)})" style="background:#dc3545; color:white; border:none; padding:4px 10px; border-radius:4px; cursor:pointer; margin-left:4px;">⏏ Logout</button></td>
                 </tr>
             `).join('');
 
@@ -154,8 +191,8 @@
                     <td>${u.rol}</td>
                     <td>${u.sucursal}</td>
                     <td>${u.ultimo_login || '-'}</td>
-                    <td>${u.activo_ahora ? '<span class="estado-on">🟢</span>' : '<span class="estado-off">🔴</span>'}</td>
-                    <td><button class="btn" data-reset-id="${u.id}" data-reset-nombre="${u.nombre}">🔑 Reset</button></td>
+                    <td>${renderEstadoUsuario(u)}</td>
+                    <td><button class="btn" data-reset-id="${u.id}" data-reset-nombre="${u.nombre}">🔑 Reset</button><button onclick="forzarLogout(${u.id}, ${JSON.stringify(u.nombre)})" style="background:#dc3545; color:white; border:none; padding:4px 10px; border-radius:4px; cursor:pointer; margin-left:4px;">⏏ Logout</button></td>
                 </tr>
             `).join('');
         }
