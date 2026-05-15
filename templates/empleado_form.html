@@ -53,12 +53,15 @@
             <div id="bloque-horario-sucursal">
                 <div class="form-group" id="bloque-sucursal">
                     <label>Sucursal Asignada (Dejar en blanco si es Comodín/Admin)</label>
-                    <select name="farmacia_id">
+                    <select name="farmacia_id" id="farmaciaSelect">
                         <option value="">-- Ninguna --</option>
                         {% for f in farmacias %}
                         <option value="{{ f.id }}" {% if empleado and empleado.farmacia_id == f.id %}selected{% endif %}>{{ f.nombre }} ({{ f.jornada }})</option>
                         {% endfor %}
                     </select>
+                    <p id="ayudaSucursal" style="font-size: 11px; color: #666; margin-top: 5px;">
+                        *Los comodines no deben quedar atados a una sucursal fija; se mantienen libres para cubrir turnos.
+                    </p>
                 </div>
 
                 <!-- Nuevo bloque de horario separado -->
@@ -133,6 +136,8 @@
         const passwordInput = document.getElementById('passwordInput');
         const btnGenerarPassword = document.getElementById('btnGenerarPassword');
         const togglePassword = document.getElementById('togglePassword');
+        const farmaciaSelect = document.getElementById('farmaciaSelect');
+        const ayudaSucursal = document.getElementById('ayudaSucursal');
 
         function toggleHoras() {
             const esVariable = checkHorarioVariable && checkHorarioVariable.checked;
@@ -170,6 +175,25 @@
 
             if (!esAdmin) {
                 toggleHoras();
+            }
+        }
+
+        function toggleSucursalAsignada() {
+            if (!farmaciaSelect) {
+                return;
+            }
+
+            const esComodin = rolSelect && rolSelect.value === 'Comodin';
+            const esAdmin = rolSelect && (rolSelect.value === 'Admin' || rolSelect.value === 'Desarrollador');
+            const bloquear = esComodin || esAdmin;
+
+            farmaciaSelect.disabled = bloquear;
+            if (bloquear) {
+                farmaciaSelect.value = '';
+            }
+
+            if (ayudaSucursal) {
+                ayudaSucursal.style.display = esComodin ? 'block' : 'none';
             }
         }
 
@@ -248,6 +272,7 @@
         }
         if (rolSelect) {
             rolSelect.addEventListener('change', toggleRolFields);
+            rolSelect.addEventListener('change', toggleSucursalAsignada);
         }
         if (form) {
             form.addEventListener('submit', (event) => {
@@ -267,6 +292,7 @@
         }
         toggleHoras();
         toggleRolFields();
+        toggleSucursalAsignada();
     </script>
 </body>
 </html>

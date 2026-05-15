@@ -858,6 +858,7 @@ def nuevo_empleado():
             return redirect(url_for('nuevo_empleado'))
 
         fid = request.form.get('farmacia_id', '')
+        farmacia_id = None if fid == "" or rol_nuevo in ('Comodin', 'Admin', 'Desarrollador') else int(fid)
         
         # Procesar el horario a partir de los inputs de hora
         if 'es_comodin' in request.form:
@@ -874,7 +875,7 @@ def nuevo_empleado():
             nombre=request.form['nombre'],
             rol=rol_nuevo,
             horario=horario_final,
-            farmacia_id=None if fid == "" else int(fid),
+            farmacia_id=farmacia_id,
             username=request.form['username'],
             password=request.form['password'],
             dia_descanso_fijo=int(dia_fijo) if dia_fijo else None
@@ -936,7 +937,7 @@ def editar_empleado(id):
         empleado.dia_descanso_fijo = int(dia_fijo) if dia_fijo else None
 
         fid = request.form.get('farmacia_id', '')
-        empleado.farmacia_id = None if fid == "" else int(fid)
+        empleado.farmacia_id = None if fid == "" or rol_nuevo in ('Comodin', 'Admin', 'Desarrollador') else int(fid)
         empleado.username = request.form.get('username', empleado.username)
         
         if request.form['password']: # Solo actualiza clave si no está en blanco
