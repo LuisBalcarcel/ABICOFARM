@@ -5,11 +5,52 @@
     <title>Panel del Desarrollador - ABICOFARM</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap');
-        body { font-family: 'Montserrat', sans-serif; background: #0d1117; color: #e6edf3; margin: 0; }
-        .header { display: flex; justify-content: space-between; align-items: center; padding: 20px 30px; border-bottom: 1px solid #1f2937; }
-        .title { font-size: 20px; font-weight: 700; color: #FF6B00; }
+        :root {
+            --abicofarm-blue: #003366;
+            --abicofarm-blue-soft: #0b4a7a;
+            --abicofarm-orange: #ff6b00;
+            --abicofarm-orange-soft: #fff1e6;
+            --abicofarm-bg: #f4f7f6;
+            --abicofarm-surface: #ffffff;
+            --abicofarm-border: #dbe3ea;
+            --abicofarm-text: #18324f;
+            --abicofarm-muted: #6b7280;
+        }
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Montserrat', sans-serif;
+            background:
+                radial-gradient(circle at top right, rgba(255, 107, 0, 0.08), transparent 28%),
+                radial-gradient(circle at left top, rgba(0, 51, 102, 0.08), transparent 26%),
+                var(--abicofarm-bg);
+            color: var(--abicofarm-text);
+            margin: 0;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 18px 30px;
+            background: linear-gradient(90deg, var(--abicofarm-blue), #0a2e52);
+            color: #fff;
+            border-bottom: 4px solid var(--abicofarm-orange);
+            box-shadow: 0 12px 30px rgba(0, 51, 102, 0.18);
+        }
+        .title { font-size: 20px; font-weight: 700; color: #fff; letter-spacing: 0.2px; }
+        .title span { color: var(--abicofarm-orange); }
         .actions { display: flex; gap: 12px; align-items: center; }
-        .btn { background: #FF6B00; color: #0d1117; border: none; padding: 10px 14px; border-radius: 8px; font-weight: 700; cursor: pointer; font-family: inherit; font-size: 13px; }
+        .btn {
+            background: var(--abicofarm-orange);
+            color: #fff;
+            border: none;
+            padding: 10px 14px;
+            border-radius: 10px;
+            font-weight: 700;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 13px;
+            box-shadow: 0 8px 20px rgba(255, 107, 0, 0.22);
+        }
         .btn-logout-user {
             background: #dc2626;
             color: #fff;
@@ -23,30 +64,79 @@
             font-size: 13px;
         }
         .btn-logout-user:hover { filter: brightness(1.06); }
-        .link { color: #e6edf3; text-decoration: none; font-weight: 600; }
-        .btn-secondary { background: #374151; color: #e6edf3; border: none; padding: 10px 14px; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 13px; text-decoration: none; display: inline-block; }
+        .btn-secondary {
+            background: #214c78;
+            color: #fff;
+            border: none;
+            padding: 10px 14px;
+            border-radius: 10px;
+            font-weight: 700;
+            cursor: pointer;
+            font-size: 13px;
+            text-decoration: none;
+            display: inline-block;
+            box-shadow: 0 8px 20px rgba(33, 76, 120, 0.18);
+        }
         .container { padding: 30px; display: grid; gap: 24px; }
-        .card { background: #111827; border: 1px solid #1f2937; border-radius: 12px; padding: 20px; }
-        h2 { margin: 0 0 15px 0; font-size: 16px; color: #FF6B00; }
+        .card {
+            background: var(--abicofarm-surface);
+            border: 1px solid var(--abicofarm-border);
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 10px 26px rgba(0, 51, 102, 0.07);
+        }
+        h2 { margin: 0 0 15px 0; font-size: 16px; color: var(--abicofarm-blue); }
         table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        th, td { padding: 10px; border-bottom: 1px solid #1f2937; text-align: left; }
-        th { color: #9ca3af; font-weight: 600; }
+        th, td { padding: 10px; border-bottom: 1px solid #e8edf2; text-align: left; }
+        th { color: var(--abicofarm-blue); font-weight: 700; background: #f8fbfd; }
         .estado-on { color: #22c55e; font-weight: 700; }
         .estado-off { color: #ef4444; font-weight: 700; }
         .estado-pending { color: #f59e0b; font-weight: 700; }
-        .toast { position: fixed; top: 20px; right: 20px; background: #16a34a; color: white; padding: 10px 14px; border-radius: 8px; font-size: 12px; display: none; }
+        .toast { position: fixed; top: 20px; right: 20px; background: #16a34a; color: white; padding: 10px 14px; border-radius: 8px; font-size: 12px; display: none; box-shadow: 0 10px 25px rgba(0,0,0,0.15); }
         .toast.error { background: #dc2626; }
         .toast.warning { background: #d97706; }
-        dialog { border: none; border-radius: 10px; padding: 20px; background: #0f172a; color: #e6edf3; }
+        dialog { border: none; border-radius: 14px; padding: 20px; background: #fff; color: var(--abicofarm-text); box-shadow: 0 20px 50px rgba(0,0,0,0.22); }
         dialog::backdrop { background: rgba(0,0,0,0.6); }
         .dialog-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 15px; }
-        input[type="text"] { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #1f2937; background: #0d1117; color: #e6edf3; }
-        .footer { text-align: center; padding: 20px; font-size: 12px; color: #9ca3af; }
+        input[type="text"], input[type="password"] {
+            width: 100%;
+            padding: 10px 12px;
+            border-radius: 10px;
+            border: 1px solid var(--abicofarm-border);
+            background: #fff;
+            color: var(--abicofarm-text);
+            outline: none;
+        }
+        input[type="text"]:focus, input[type="password"]:focus {
+            border-color: var(--abicofarm-orange);
+            box-shadow: 0 0 0 3px rgba(255, 107, 0, 0.12);
+        }
+        .footer { text-align: center; padding: 20px; font-size: 12px; color: var(--abicofarm-muted); }
+        .dev-section {
+            background: linear-gradient(180deg, #ffffff, #fdfefe);
+            border: 1px solid var(--abicofarm-border);
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 10px 26px rgba(0, 51, 102, 0.07);
+        }
+        .dev-section h3 { margin: 0 0 14px 0; color: var(--abicofarm-blue); }
+        .dev-form-grid { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+        .dev-field label { color: var(--abicofarm-muted); font-size: 12px; display: inline-block; margin-bottom: 6px; }
+        .dev-action-btn {
+            background: var(--abicofarm-orange);
+            color: #fff;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: 700;
+            box-shadow: 0 8px 20px rgba(255, 107, 0, 0.2);
+        }
     </style>
 </head>
 <body>
     <div class="header">
-        <div class="title">🛠️ Panel del Desarrollador — ABICOFARM v1.0</div>
+        <div class="title">🛠️ Panel del <span>Desarrollador</span> — ABICOFARM v1.0</div>
         <div class="actions">
             <button class="btn" id="btnActualizar">🔄 Actualizar</button>
             <a href="{{ url_for('logout') }}" class="btn-secondary">← Cerrar mi sesión</a>
@@ -71,32 +161,22 @@
             </table>
         </div>
 
-        <div style="background:#161b22; border:1px solid #30363d; 
-                    border-radius:8px; padding:20px; margin-bottom:20px;">
-            <h3 style="color:#FF6B00; margin-top:0;">➕ Crear Administrador</h3>
-            <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
-                <div>
-                    <label style="color:#8b949e; font-size:12px;">Nombre Completo</label><br>
-                    <input type="text" id="admin_nombre" placeholder="Ej: Susana" 
-                           style="background:#0d1117; color:white; border:1px solid #30363d; 
-                                  padding:8px 12px; border-radius:4px;">
+        <div class="dev-section">
+            <h3>➕ Crear Administrador</h3>
+            <div class="dev-form-grid">
+                <div class="dev-field">
+                    <label for="admin_nombre">Nombre Completo</label><br>
+                    <input type="text" id="admin_nombre" placeholder="Ej: Susana">
                 </div>
-                <div>
-                    <label style="color:#8b949e; font-size:12px;">Usuario</label><br>
-                    <input type="text" id="admin_username" placeholder="Ej: susana" 
-                           style="background:#0d1117; color:white; border:1px solid #30363d; 
-                                  padding:8px 12px; border-radius:4px;">
+                <div class="dev-field">
+                    <label for="admin_username">Usuario</label><br>
+                    <input type="text" id="admin_username" placeholder="Ej: susana">
                 </div>
-                <div>
-                    <label style="color:#8b949e; font-size:12px;">Contraseña</label><br>
-                    <input type="password" id="admin_password" placeholder="Contraseña inicial" 
-                           style="background:#0d1117; color:white; border:1px solid #30363d; 
-                                  padding:8px 12px; border-radius:4px;">
+                <div class="dev-field">
+                    <label for="admin_password">Contraseña</label><br>
+                    <input type="password" id="admin_password" placeholder="Contraseña inicial">
                 </div>
-                <button onclick="crearAdmin()" 
-                        style="background:#FF6B00; color:white; border:none; 
-                               padding:9px 18px; border-radius:4px; cursor:pointer;
-                               font-weight:bold;">
+                <button onclick="crearAdmin()" class="dev-action-btn">
                     ➕ Crear Admin
                 </button>
             </div>
