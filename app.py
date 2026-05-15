@@ -1309,11 +1309,22 @@ def asignar_temporal(emp_id):
     farmacias = Farmacia.query.all()
     
     if request.method == 'POST':
-        farmacia_dest_id = request.form['farmacia_id']
+        farmacia_dest_id = (request.form.get('farmacia_id') or '').strip()
         fecha = request.form['fecha']
+
+        AsignacionTemporal.query.filter_by(empleado_id=emp_id, fecha=fecha).delete()
+
+        if farmacia_dest_id == '':
+            db.session.commit()
+            flash(f'{empleado.nombre} quedó libre para la fecha seleccionada.', 'success')
+            return redirect(url_for('admin_dashboard'))
         
         # Guardar la orden
-        nueva_asig = AsignacionTemporal(empleado_id=emp_id, farmacia_destino_id=farmacia_dest_id, fecha=fecha)
+        nueva_asig = AsignacionTemporal(
+            empleado_id=emp_id,
+            farmacia_destino_id=int(farmacia_dest_id),
+            fecha=fecha
+        )
         db.session.add(nueva_asig)
         db.session.commit()
         

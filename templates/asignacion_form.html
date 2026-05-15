@@ -27,11 +27,15 @@
         
         <form method="POST">
             <label>Enviar a Sucursal:</label>
-            <select name="farmacia_id" required>
+            <select name="farmacia_id">
+                <option value="">-- Libre / Sin farmacia --</option>
                 {% for f in farmacias %}
                 <option value="{{ f.id }}">{{ f.nombre }}</option>
                 {% endfor %}
             </select>
+            <p style="font-size:12px; color:#666; margin-top:8px;">
+                Si seleccionas la opción libre, se eliminará la asignación temporal para la fecha indicada y el empleado quedará disponible.
+            </p>
             
             <label>Fecha exacta del traslado temporal:</label>
             <input type="date" name="fecha" required>
