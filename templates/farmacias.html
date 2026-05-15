@@ -67,7 +67,9 @@
                     <td>{{ f.empleados|length }} personas</td>
                     <td>
                         <a href="{{ url_for('editar_farmacia', id=f.id) }}" class="action-link">Editar</a>
-                        <a href="{{ url_for('eliminar_farmacia', id=f.id) }}" class="action-link delete" onclick="return confirm('¿Eliminar la sucursal {{ f.nombre }}?');">Eliminar</a>
+                        <form action="{{ url_for('eliminar_farmacia', id=f.id) }}" method="post" style="display:inline; margin:0;">
+                            <button type="submit" class="action-link delete" onclick="return confirm('¿Eliminar la sucursal {{ f.nombre }}?');">Eliminar</button>
+                        </form>
                     </td>
                 </tr>
                 {% endfor %}

@@ -1037,7 +1037,7 @@ def editar_farmacia(id):
         
     return render_template('farmacia_form.html', farmacia=farmacia)
 
-@app.route('/admin/farmacia/eliminar/<int:id>')
+@app.route('/admin/farmacia/eliminar/<int:id>', methods=['POST'])
 def eliminar_farmacia(id):
     if 'user_id' not in session or session.get('rol') != 'Admin':
         return redirect(url_for('login'))
