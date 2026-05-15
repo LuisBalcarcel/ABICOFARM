@@ -973,8 +973,21 @@ def eliminar_empleado(id):
         
     empleado = Empleado.query.get(id)
     if empleado:
-        db.session.delete(empleado)
-        db.session.commit()
+        try:
+            Solicitud.query.filter_by(cobertura_empleado_id=id).update(
+                {Solicitud.cobertura_empleado_id: None},
+                synchronize_session=False
+            )
+            Solicitud.query.filter_by(empleado_id=id).delete(synchronize_session=False)
+            HorarioGenerado.query.filter_by(empleado_id=id).delete(synchronize_session=False)
+            AsignacionTemporal.query.filter_by(empleado_id=id).delete(synchronize_session=False)
+
+            db.session.delete(empleado)
+            db.session.commit()
+            flash('Empleado eliminado correctamente.')
+        except Exception:
+            db.session.rollback()
+            flash('No se pudo eliminar el empleado porque tiene registros relacionados.', 'error')
     return redirect(url_for('admin_dashboard'))
 
 # --- CRUD DE FARMACIAS ---
